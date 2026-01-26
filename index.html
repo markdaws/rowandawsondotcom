@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0a0a1a">
     <title>Smashers - Zombie Defense</title>
     <style>
         * {
@@ -11,43 +15,54 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
-            background: #1a1a2e;
+            background: #0a0a1a;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
             font-family: 'Courier New', monospace;
-            overflow: hidden;
         }
 
         #gameContainer {
             position: relative;
             touch-action: none;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         #gameCanvas {
             display: block;
             background: #16213e;
-            border: 4px solid #0f3460;
-            border-radius: 8px;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
 
         #touchControls {
             display: none;
-            position: absolute;
-            bottom: 10px;
+            position: fixed;
+            bottom: 0;
             left: 0;
             right: 0;
-            padding: 0 10px;
+            padding: 15px;
+            z-index: 100;
+            pointer-events: none;
         }
 
         .touch-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
+            background: rgba(40, 40, 50, 0.85);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            width: 70px;
+            height: 70px;
             color: white;
             font-size: 24px;
             font-weight: bold;
@@ -57,25 +72,65 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            pointer-events: auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
         }
 
         .touch-btn:active {
-            background: rgba(255, 255, 255, 0.4);
+            background: rgba(80, 80, 100, 0.9);
+            transform: scale(0.95);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
         }
 
         #leftControls, #rightControls {
-            position: absolute;
-            bottom: 10px;
+            position: fixed;
+            bottom: 20px;
             display: flex;
-            gap: 10px;
+            gap: 12px;
+            pointer-events: auto;
         }
 
         #leftControls {
-            left: 10px;
+            left: max(20px, env(safe-area-inset-left));
         }
 
         #rightControls {
-            right: 10px;
+            right: max(20px, env(safe-area-inset-right));
+        }
+
+        /* Safe area support for notched devices */
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            #leftControls, #rightControls {
+                bottom: calc(20px + env(safe-area-inset-bottom));
+            }
+        }
+
+        /* Responsive button sizing */
+        @media (max-width: 600px) {
+            .touch-btn {
+                width: 58px;
+                height: 58px;
+            }
+            .pixel-icon {
+                transform: scale(0.85);
+            }
+            #leftControls, #rightControls {
+                gap: 8px;
+            }
+        }
+
+        @media (max-height: 500px) {
+            .touch-btn {
+                width: 50px;
+                height: 50px;
+            }
+            .pixel-icon {
+                transform: scale(0.75);
+            }
+            #leftControls, #rightControls {
+                bottom: 10px;
+                gap: 6px;
+            }
         }
 
         .attack-btn {
@@ -86,6 +141,140 @@
         .shoot-btn {
             background: rgba(100, 100, 255, 0.3);
             border-color: rgba(100, 100, 255, 0.5);
+        }
+
+        .jump-btn {
+            background: rgba(100, 255, 100, 0.3);
+            border-color: rgba(100, 255, 100, 0.5);
+        }
+
+        .smash-btn {
+            background: rgba(255, 150, 0, 0.3);
+            border-color: rgba(255, 150, 0, 0.5);
+        }
+
+        /* Pixel art icon container */
+        .pixel-icon {
+            width: 32px;
+            height: 32px;
+            position: relative;
+            image-rendering: pixelated;
+        }
+
+        /* Fist icon for punch */
+        .fist-icon {
+            background:
+                /* Knuckles */
+                linear-gradient(#e8c090, #e8c090) 8px 0px / 4px 4px,
+                linear-gradient(#e8c090, #e8c090) 14px 0px / 4px 4px,
+                linear-gradient(#e8c090, #e8c090) 20px 0px / 4px 4px,
+                /* Fingers */
+                linear-gradient(#e8c090, #e8c090) 8px 4px / 4px 8px,
+                linear-gradient(#e8c090, #e8c090) 14px 4px / 4px 8px,
+                linear-gradient(#e8c090, #e8c090) 20px 4px / 4px 8px,
+                /* Palm */
+                linear-gradient(#e8c090, #e8c090) 4px 12px / 24px 12px,
+                /* Thumb */
+                linear-gradient(#e8c090, #e8c090) 0px 16px / 4px 8px,
+                /* Wrist */
+                linear-gradient(#d0a878, #d0a878) 8px 24px / 16px 8px,
+                /* Motion lines */
+                linear-gradient(#fff, #fff) 26px 6px / 6px 2px,
+                linear-gradient(#fff, #fff) 28px 12px / 4px 2px,
+                linear-gradient(#fff, #fff) 26px 18px / 6px 2px;
+            background-repeat: no-repeat;
+        }
+
+        /* Gun icon for shoot */
+        .gun-icon {
+            background:
+                /* Barrel */
+                linear-gradient(#4a4a4a, #4a4a4a) 16px 8px / 16px 4px,
+                /* Barrel highlight */
+                linear-gradient(#6a6a6a, #6a6a6a) 16px 8px / 16px 2px,
+                /* Body */
+                linear-gradient(#3a3a3a, #3a3a3a) 4px 8px / 14px 8px,
+                /* Trigger guard */
+                linear-gradient(#3a3a3a, #3a3a3a) 8px 16px / 8px 4px,
+                /* Handle */
+                linear-gradient(#5a4030, #5a4030) 4px 16px / 8px 12px,
+                /* Handle texture */
+                linear-gradient(#4a3020, #4a3020) 4px 20px / 2px 6px,
+                linear-gradient(#4a3020, #4a3020) 8px 20px / 2px 6px,
+                /* Muzzle flash */
+                linear-gradient(#ffdd44, #ffdd44) 28px 4px / 4px 4px,
+                linear-gradient(#ffdd44, #ffdd44) 26px 6px / 2px 8px,
+                linear-gradient(#ff8800, #ff8800) 30px 6px / 2px 4px;
+            background-repeat: no-repeat;
+        }
+
+        /* Jump icon - player jumping up */
+        .jump-icon {
+            background:
+                /* Head */
+                linear-gradient(#e8c090, #e8c090) 12px 0px / 8px 6px,
+                /* Body */
+                linear-gradient(#4a8c23, #4a8c23) 10px 6px / 12px 10px,
+                /* Arms up */
+                linear-gradient(#4a8c23, #4a8c23) 4px 4px / 6px 4px,
+                linear-gradient(#4a8c23, #4a8c23) 22px 4px / 6px 4px,
+                /* Legs bent */
+                linear-gradient(#2d5a16, #2d5a16) 10px 16px / 4px 6px,
+                linear-gradient(#2d5a16, #2d5a16) 18px 16px / 4px 6px,
+                /* Feet */
+                linear-gradient(#6b4423, #6b4423) 8px 22px / 6px 4px,
+                linear-gradient(#6b4423, #6b4423) 18px 22px / 6px 4px,
+                /* Up arrow */
+                linear-gradient(#fff, #fff) 14px 26px / 4px 6px,
+                linear-gradient(#fff, #fff) 10px 28px / 4px 2px,
+                linear-gradient(#fff, #fff) 18px 28px / 4px 2px;
+            background-repeat: no-repeat;
+        }
+
+        /* Ground smash icon */
+        .smash-icon {
+            background:
+                /* Head */
+                linear-gradient(#e8c090, #e8c090) 12px 0px / 8px 5px,
+                /* Body leaning */
+                linear-gradient(#4a8c23, #4a8c23) 10px 5px / 12px 8px,
+                /* Arms down */
+                linear-gradient(#4a8c23, #4a8c23) 6px 8px / 4px 10px,
+                linear-gradient(#4a8c23, #4a8c23) 22px 8px / 4px 10px,
+                /* Fists */
+                linear-gradient(#e8c090, #e8c090) 4px 18px / 6px 4px,
+                linear-gradient(#e8c090, #e8c090) 22px 18px / 6px 4px,
+                /* Legs */
+                linear-gradient(#2d5a16, #2d5a16) 12px 13px / 8px 6px,
+                /* Impact ring 1 */
+                linear-gradient(#ff6600, #ff6600) 0px 24px / 32px 2px,
+                /* Impact ring 2 */
+                linear-gradient(#ff8844, #ff8844) 4px 26px / 24px 2px,
+                /* Impact sparks */
+                linear-gradient(#ffaa00, #ffaa00) 2px 22px / 2px 2px,
+                linear-gradient(#ffaa00, #ffaa00) 28px 22px / 2px 2px,
+                linear-gradient(#ffaa00, #ffaa00) 8px 28px / 2px 2px,
+                linear-gradient(#ffaa00, #ffaa00) 22px 28px / 2px 2px;
+            background-repeat: no-repeat;
+        }
+
+        /* Arrow icons for movement */
+        .arrow-left-icon {
+            background:
+                linear-gradient(#fff, #fff) 8px 14px / 16px 4px,
+                linear-gradient(#fff, #fff) 8px 10px / 4px 4px,
+                linear-gradient(#fff, #fff) 8px 18px / 4px 4px,
+                linear-gradient(#fff, #fff) 4px 12px / 4px 8px;
+            background-repeat: no-repeat;
+        }
+
+        .arrow-right-icon {
+            background:
+                linear-gradient(#fff, #fff) 8px 14px / 16px 4px,
+                linear-gradient(#fff, #fff) 20px 10px / 4px 4px,
+                linear-gradient(#fff, #fff) 20px 18px / 4px 4px,
+                linear-gradient(#fff, #fff) 24px 12px / 4px 8px;
+            background-repeat: no-repeat;
         }
 
         @media (pointer: coarse) {
@@ -100,14 +289,14 @@
         <canvas id="gameCanvas"></canvas>
         <div id="touchControls">
             <div id="leftControls">
-                <button class="touch-btn" id="btnLeft">&larr;</button>
-                <button class="touch-btn" id="btnRight">&rarr;</button>
+                <button class="touch-btn" id="btnLeft"><div class="pixel-icon arrow-left-icon"></div></button>
+                <button class="touch-btn" id="btnRight"><div class="pixel-icon arrow-right-icon"></div></button>
             </div>
             <div id="rightControls">
-                <button class="touch-btn attack-btn" id="btnPunch">P</button>
-                <button class="touch-btn shoot-btn" id="btnShoot">Q</button>
-                <button class="touch-btn" id="btnJump" style="background: rgba(100, 255, 100, 0.3); border-color: rgba(100, 255, 100, 0.5);">W</button>
-                <button class="touch-btn" id="btnSmash" style="background: rgba(255, 150, 0, 0.3); border-color: rgba(255, 150, 0, 0.5);">S</button>
+                <button class="touch-btn attack-btn" id="btnPunch"><div class="pixel-icon fist-icon"></div></button>
+                <button class="touch-btn shoot-btn" id="btnShoot"><div class="pixel-icon gun-icon"></div></button>
+                <button class="touch-btn jump-btn" id="btnJump"><div class="pixel-icon jump-icon"></div></button>
+                <button class="touch-btn smash-btn" id="btnSmash"><div class="pixel-icon smash-icon"></div></button>
             </div>
         </div>
     </div>
@@ -1193,9 +1382,41 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Set canvas size
+        // Set canvas internal resolution
         canvas.width = CANVAS_WIDTH;
         canvas.height = CANVAS_HEIGHT;
+
+        // Responsive scaling function
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const gameAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
+            const windowAspect = windowWidth / windowHeight;
+
+            let displayWidth, displayHeight;
+
+            if (windowAspect > gameAspect) {
+                // Window is wider than game - fit to height
+                displayHeight = windowHeight;
+                displayWidth = displayHeight * gameAspect;
+            } else {
+                // Window is taller than game - fit to width
+                displayWidth = windowWidth;
+                displayHeight = displayWidth / gameAspect;
+            }
+
+            // Apply CSS scaling (keeps internal resolution, scales display)
+            canvas.style.width = displayWidth + 'px';
+            canvas.style.height = displayHeight + 'px';
+        }
+
+        // Initial resize and listen for window changes
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 100);
+        });
 
         // ============================================
         // BASE CLASS
