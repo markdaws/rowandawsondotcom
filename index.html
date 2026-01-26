@@ -311,9 +311,11 @@
         const ZOMBIE_TRAVEL_TIME = 10;
         const PUNCH_COOLDOWN = 100;
         const SHOOT_COOLDOWN = 2500;
+        const MINIGUN_COOLDOWN = 10; // 0.01 seconds
         const GROUND_SMASH_COOLDOWN = 2000;
         const PUNCH_DAMAGE = 10;
         const SHOOT_DAMAGE = 100;
+        const MINIGUN_DAMAGE = 10;
         const GROUND_SMASH_DAMAGE = 50;
         const GROUND_SMASH_RADIUS = 120;
         const ZOMBIE_HEALTH = 100;
@@ -1742,6 +1744,7 @@
                 this.speed = PLAYER_SPEED;
                 this.lastPunchTime = 0;
                 this.lastShootTime = 0;
+                this.lastMinigunTime = 0;
                 this.lastGroundSmashTime = 0;
                 this.isPunching = false;
                 this.punchAnimTime = 0;
@@ -2025,6 +2028,18 @@
 
             canShoot(currentTime) {
                 return currentTime - this.lastShootTime >= SHOOT_COOLDOWN;
+            }
+
+            canShootMinigun(currentTime) {
+                return currentTime - this.lastMinigunTime >= MINIGUN_COOLDOWN;
+            }
+
+            shootMinigun(currentTime) {
+                if (this.canShootMinigun(currentTime)) {
+                    this.lastMinigunTime = currentTime;
+                    return true;
+                }
+                return false;
             }
 
             punch(currentTime) {
@@ -2564,16 +2579,17 @@
         // PROJECTILE CLASS
         // ============================================
         class Projectile {
-            constructor(x, y, direction = 1) {
+            constructor(x, y, direction = 1, damage = SHOOT_DAMAGE, isMinigun = false) {
                 this.x = x;
                 this.y = y;
                 this.direction = direction; // 1 = right, -1 = left
-                this.width = 10;
-                this.height = 5;
+                this.width = isMinigun ? 6 : 10;
+                this.height = isMinigun ? 3 : 5;
                 this.speed = PROJECTILE_SPEED;
-                this.damage = SHOOT_DAMAGE;
+                this.damage = damage;
+                this.isMinigun = isMinigun;
                 this.trail = [];
-                this.trailLength = 8;
+                this.trailLength = isMinigun ? 4 : 8;
             }
 
             draw() {
@@ -2680,6 +2696,13 @@
                 this.titanAnnouncementTime = 0;
                 this.activeTitan = null;
 
+                // Minigun unlock tracking
+                this.consecutiveJumps = 0;
+                this.lastJumpTime = 0;
+                this.hasMinigun = false;
+                this.minigunUnlockAnnouncement = false;
+                this.minigunAnnouncementTime = 0;
+
                 this.setupInput();
             }
 
@@ -2710,12 +2733,15 @@
                         e.preventDefault();
                         if (this.state === SPLASH) {
                             this.startGame();
-                        } else if (this.state === GAME_OVER) {
-                            this.startGame();
                         } else if (this.state === PLAYING && !wasPressed) {
                             // Only punch on fresh key press (tap)
                             this.handlePunch();
                         }
+                    }
+
+                    // Enter to restart after game over
+                    if (e.key === 'Enter' && this.state === GAME_OVER) {
+                        this.startGame();
                     }
 
                     if (key === 'q' && this.state === PLAYING) {
@@ -2761,7 +2787,10 @@
                 btnPunch.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     initSound();
-                    if (this.state === SPLASH || this.state === GAME_OVER) {
+                    if (this.state === SPLASH) {
+                        this.startGame();
+                    } else if (this.state === GAME_OVER) {
+                        // Tap anywhere to restart on mobile (game over)
                         this.startGame();
                     } else {
                         this.handlePunch();
@@ -2772,8 +2801,12 @@
                     e.preventDefault();
                     initSound();
                     if (this.state === PLAYING) {
+                        this.keys['q'] = true; // Enable continuous fire for minigun
                         this.handleShoot();
                     }
+                });
+                btnShoot.addEventListener('touchend', () => {
+                    this.keys['q'] = false;
                 });
 
                 btnJump.addEventListener('touchstart', (e) => {
@@ -2919,52 +2952,121 @@
 
             handleShoot() {
                 const currentTime = performance.now();
-                if (this.player.shoot(currentTime)) {
-                    soundManager.playShoot();
 
-                    // Recoil and muzzle flash
-                    this.player.applyRecoil(8);
-                    this.player.triggerMuzzleFlash();
+                // Check for minigun unlock: 10 consecutive jumps then shoot
+                if (!this.hasMinigun && this.consecutiveJumps >= 10) {
+                    this.hasMinigun = true;
+                    this.minigunUnlockAnnouncement = true;
+                    this.minigunAnnouncementTime = currentTime;
+                    this.consecutiveJumps = 0;
+                    this.screenEffects.shake(10, 0.5);
+                    this.screenEffects.flash('rgba(255, 150, 0, 0.5)', 0.5);
+                    this.screenEffects.triggerChromatic(3);
+                }
 
-                    // Screen shake
-                    this.screenEffects.shake(4, 0.1);
-                    this.screenEffects.flash('rgba(255, 200, 0, 0.3)', 0.3);
+                // Use minigun if unlocked
+                if (this.hasMinigun) {
+                    if (this.player.shootMinigun(currentTime)) {
+                        soundManager.playShoot();
 
-                    // Muzzle smoke particles
-                    this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 8, {
-                        angle: 0,
-                        spread: Math.PI * 0.3,
-                        speed: 80,
-                        colors: ['#888888', '#aaaaaa', '#666666'],
-                        size: 10,
-                        life: 0.4,
-                        gravity: -50,
-                        friction: 0.95
-                    });
+                        // Smaller recoil for minigun
+                        this.player.applyRecoil(2);
+                        this.player.triggerMuzzleFlash();
 
-                    // Shell casing particle
-                    this.particles.emit(this.player.x + this.player.width - 5, this.player.y + 25, 1, {
-                        angle: -Math.PI / 4,
-                        spread: 0.3,
-                        speed: 150,
-                        colors: ['#ffd700'],
-                        size: 4,
-                        life: 0.6,
-                        gravity: 600,
-                        friction: 0.99
-                    });
+                        // Light screen shake
+                        this.screenEffects.shake(1, 0.05);
 
-                    const direction = this.player.facingRight ? 1 : -1;
-                    const bulletX = this.player.facingRight ?
-                        this.player.x + this.player.width :
-                        this.player.x;
-                    this.projectiles.push(new Projectile(bulletX, this.player.y + 22, direction));
+                        // Smaller muzzle smoke
+                        this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 2, {
+                            angle: 0,
+                            spread: Math.PI * 0.2,
+                            speed: 50,
+                            colors: ['#888888', '#aaaaaa'],
+                            size: 5,
+                            life: 0.2,
+                            gravity: -30,
+                            friction: 0.95
+                        });
+
+                        // Shell casing particle
+                        this.particles.emit(this.player.x + this.player.width - 5, this.player.y + 25, 1, {
+                            angle: -Math.PI / 4,
+                            spread: 0.5,
+                            speed: 100,
+                            colors: ['#ffd700'],
+                            size: 3,
+                            life: 0.4,
+                            gravity: 600,
+                            friction: 0.99
+                        });
+
+                        const direction = this.player.facingRight ? 1 : -1;
+                        const bulletX = this.player.facingRight ?
+                            this.player.x + this.player.width :
+                            this.player.x;
+                        // Minigun bullet with lower damage and slight spread
+                        const spread = (Math.random() - 0.5) * 8;
+                        this.projectiles.push(new Projectile(bulletX, this.player.y + 22 + spread, direction, MINIGUN_DAMAGE, true));
+                    }
+                } else {
+                    // Regular gun
+                    if (this.player.shoot(currentTime)) {
+                        soundManager.playShoot();
+
+                        // Recoil and muzzle flash
+                        this.player.applyRecoil(8);
+                        this.player.triggerMuzzleFlash();
+
+                        // Screen shake
+                        this.screenEffects.shake(4, 0.1);
+                        this.screenEffects.flash('rgba(255, 200, 0, 0.3)', 0.3);
+
+                        // Muzzle smoke particles
+                        this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 8, {
+                            angle: 0,
+                            spread: Math.PI * 0.3,
+                            speed: 80,
+                            colors: ['#888888', '#aaaaaa', '#666666'],
+                            size: 10,
+                            life: 0.4,
+                            gravity: -50,
+                            friction: 0.95
+                        });
+
+                        // Shell casing particle
+                        this.particles.emit(this.player.x + this.player.width - 5, this.player.y + 25, 1, {
+                            angle: -Math.PI / 4,
+                            spread: 0.3,
+                            speed: 150,
+                            colors: ['#ffd700'],
+                            size: 4,
+                            life: 0.6,
+                            gravity: 600,
+                            friction: 0.99
+                        });
+
+                        const direction = this.player.facingRight ? 1 : -1;
+                        const bulletX = this.player.facingRight ?
+                            this.player.x + this.player.width :
+                            this.player.x;
+                        this.projectiles.push(new Projectile(bulletX, this.player.y + 22, direction));
+                    }
                 }
             }
 
             handleJump() {
                 if (this.player.jump()) {
                     soundManager.playJump();
+
+                    const currentTime = performance.now();
+                    // Track consecutive jumps for minigun unlock
+                    // Jumps must be within 2 seconds of each other to count as consecutive
+                    if (currentTime - this.lastJumpTime < 2000) {
+                        this.consecutiveJumps++;
+                    } else {
+                        this.consecutiveJumps = 1;
+                    }
+                    this.lastJumpTime = currentTime;
 
                     // Jump dust
                     this.particles.emit(this.player.x + this.player.width / 2, this.player.groundY + this.player.height, 6, {
@@ -3145,6 +3247,11 @@
                 this.titanAnnouncement = false;
                 this.titanAnnouncementTime = 0;
                 this.activeTitan = null;
+                this.consecutiveJumps = 0;
+                this.lastJumpTime = 0;
+                this.hasMinigun = false;
+                this.minigunUnlockAnnouncement = false;
+                this.minigunAnnouncementTime = 0;
                 soundManager.playBackgroundMusic();
             }
 
@@ -3182,6 +3289,11 @@
 
                 // Update player
                 this.player.update(deltaTime, this.keys);
+
+                // Continuous minigun firing when Q is held
+                if (this.hasMinigun && this.keys['q']) {
+                    this.handleShoot();
+                }
 
                 // Landing dust particles and sound
                 if (wasInAir && this.player.y >= this.player.groundY && this.player.landSquash > 0) {
@@ -3735,7 +3847,7 @@
 
                 // Cooldown indicators
                 const currentTime = performance.now();
-                const shootCooldownLeft = Math.max(0, SHOOT_COOLDOWN - (currentTime - this.player.lastShootTime));
+                const shootCooldownLeft = this.hasMinigun ? 0 : Math.max(0, SHOOT_COOLDOWN - (currentTime - this.player.lastShootTime));
                 const smashCooldownLeft = Math.max(0, GROUND_SMASH_COOLDOWN - (currentTime - this.player.lastGroundSmashTime));
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -3744,15 +3856,23 @@
                 ctx.textAlign = 'center';
                 ctx.font = '11px Courier New';
 
-                // Shoot cooldown
-                ctx.fillStyle = shootCooldownLeft > 0 ? '#666' : '#4CAF50';
-                ctx.fillText('SHOOT [Q]', CANVAS_WIDTH / 2 - 40, 25);
-                if (shootCooldownLeft > 0) {
-                    ctx.fillStyle = '#ff6666';
-                    ctx.fillText((shootCooldownLeft / 1000).toFixed(1) + 's', CANVAS_WIDTH / 2 - 40, 40);
+                // Shoot/Minigun cooldown
+                if (this.hasMinigun) {
+                    // Minigun is always ready (near-instant cooldown)
+                    ctx.fillStyle = '#ff8800';
+                    ctx.fillText('MINIGUN [Q]', CANVAS_WIDTH / 2 - 40, 25);
+                    ctx.fillStyle = '#ff8800';
+                    ctx.fillText('HOLD!', CANVAS_WIDTH / 2 - 40, 40);
                 } else {
-                    ctx.fillStyle = '#4CAF50';
-                    ctx.fillText('READY', CANVAS_WIDTH / 2 - 40, 40);
+                    ctx.fillStyle = shootCooldownLeft > 0 ? '#666' : '#4CAF50';
+                    ctx.fillText('SHOOT [Q]', CANVAS_WIDTH / 2 - 40, 25);
+                    if (shootCooldownLeft > 0) {
+                        ctx.fillStyle = '#ff6666';
+                        ctx.fillText((shootCooldownLeft / 1000).toFixed(1) + 's', CANVAS_WIDTH / 2 - 40, 40);
+                    } else {
+                        ctx.fillStyle = '#4CAF50';
+                        ctx.fillText('READY', CANVAS_WIDTH / 2 - 40, 40);
+                    }
                 }
 
                 // Smash cooldown
@@ -3852,6 +3972,46 @@
                         this.titanAnnouncement = false;
                     }
                 }
+
+                // Minigun Unlock Announcement (shows for 2 seconds)
+                if (this.minigunUnlockAnnouncement) {
+                    const announcementDuration = 2000;
+                    const timeSinceAnnouncement = currentTime - this.minigunAnnouncementTime;
+
+                    if (timeSinceAnnouncement < announcementDuration) {
+                        const fadeIn = Math.min(1, timeSinceAnnouncement / 200);
+                        const fadeOut = Math.max(0, 1 - (timeSinceAnnouncement - announcementDuration + 300) / 300);
+                        const alpha = Math.min(fadeIn, fadeOut);
+
+                        // Dark overlay behind text
+                        ctx.fillStyle = `rgba(80, 40, 0, ${alpha * 0.7})`;
+                        ctx.fillRect(0, CANVAS_HEIGHT / 2 - 40, CANVAS_WIDTH, 80);
+
+                        // Glowing text effect
+                        ctx.textAlign = 'center';
+                        ctx.font = 'bold 32px Courier New';
+
+                        // Shadow/glow
+                        ctx.shadowColor = '#ff8800';
+                        ctx.shadowBlur = 15 + Math.sin(currentTime / 80) * 8;
+                        ctx.fillStyle = `rgba(255, 136, 0, ${alpha})`;
+                        ctx.fillText('MINIGUN UNLOCKED!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+                        // Main text
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                        ctx.fillText('MINIGUN UNLOCKED!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+                        // Subtitle
+                        ctx.font = '16px Courier New';
+                        ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+                        ctx.fillText('HOLD Q TO FIRE!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 25);
+
+                        ctx.shadowColor = 'transparent';
+                    } else {
+                        this.minigunUnlockAnnouncement = false;
+                    }
+                }
             }
 
             drawGameOver() {
@@ -3949,7 +4109,7 @@
                 ctx.fillStyle = `rgb(100, ${Math.floor(200 * pulse + 55)}, 100)`;
                 ctx.font = 'bold 18px Courier New';
                 ctx.globalAlpha = pulse;
-                ctx.fillText('[ Press SPACE to Restart ]', CANVAS_WIDTH / 2, 380);
+                ctx.fillText('[ Press ENTER to Restart ]', CANVAS_WIDTH / 2, 380);
                 ctx.globalAlpha = 1;
             }
 
