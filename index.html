@@ -1196,8 +1196,21 @@
 
                 this.currentMusic = { oscillators: [], intervals: [] };
 
-                // ========== EPIC BASS ==========
-                const bassNotes = [55, 55, 73, 55, 82, 82, 73, 55];
+                // ========== EPIC BASS (64 notes = ~13 seconds per loop) ==========
+                const bassNotes = [
+                    // Section A - Dark and brooding
+                    55, 55, 55, 55, 73, 73, 55, 55,
+                    82, 82, 73, 73, 55, 55, 49, 49,
+                    // Section B - Rising tension
+                    55, 62, 73, 82, 98, 98, 82, 73,
+                    62, 55, 49, 55, 62, 73, 82, 98,
+                    // Section C - Epic climax
+                    110, 110, 98, 98, 82, 82, 73, 73,
+                    98, 110, 98, 82, 73, 62, 55, 49,
+                    // Section D - Resolution and rebuild
+                    55, 49, 55, 62, 73, 82, 73, 62,
+                    55, 55, 73, 82, 98, 82, 73, 55
+                ];
                 let bassIndex = 0;
                 const playBass = () => {
                     if (!this.currentMusic) return;
@@ -1205,30 +1218,48 @@
                     const gain = ctx.createGain();
                     osc.type = 'sawtooth';
                     osc.frequency.value = bassNotes[bassIndex];
-                    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
                     osc.connect(gain);
                     gain.connect(this.musicGain);
                     osc.start();
-                    osc.stop(ctx.currentTime + 0.16);
+                    osc.stop(ctx.currentTime + 0.19);
                     bassIndex = (bassIndex + 1) % bassNotes.length;
                 };
                 const bassInt = setInterval(playBass, 200);
                 this.currentMusic.intervals.push(bassInt);
 
-                // ========== EPIC DRUMS ==========
+                // ========== VARIED DRUMS (32 beat pattern = ~4.8 seconds, varies by section) ==========
                 let drumBeat = 0;
+                let drumSection = 0;
                 const playDrums = () => {
                     if (!this.currentMusic) return;
+                    const beatInSection = drumBeat % 32;
 
-                    // Kick on 1 and 3
-                    if (drumBeat % 4 === 0 || drumBeat % 4 === 2) {
+                    // Change drum pattern every 32 beats
+                    if (beatInSection === 0) {
+                        drumSection = (drumSection + 1) % 4;
+                    }
+
+                    // Kick patterns vary by section
+                    let playKick = false;
+                    if (drumSection === 0) {
+                        playKick = beatInSection % 4 === 0;
+                    } else if (drumSection === 1) {
+                        playKick = beatInSection % 4 === 0 || beatInSection % 8 === 3;
+                    } else if (drumSection === 2) {
+                        playKick = beatInSection % 2 === 0;
+                    } else {
+                        playKick = beatInSection % 4 === 0 || beatInSection % 4 === 2;
+                    }
+
+                    if (playKick) {
                         const kick = ctx.createOscillator();
                         const kickGain = ctx.createGain();
                         kick.type = 'sine';
                         kick.frequency.setValueAtTime(150, ctx.currentTime);
                         kick.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
-                        kickGain.gain.setValueAtTime(0.7, ctx.currentTime);
+                        kickGain.gain.setValueAtTime(0.6, ctx.currentTime);
                         kickGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
                         kick.connect(kickGain);
                         kickGain.connect(this.musicGain);
@@ -1236,64 +1267,106 @@
                         kick.stop(ctx.currentTime + 0.16);
                     }
 
-                    // Snare on 2 and 4
-                    if (drumBeat % 4 === 1 || drumBeat % 4 === 3) {
+                    // Snare patterns vary
+                    let playSnare = false;
+                    if (drumSection === 0 || drumSection === 3) {
+                        playSnare = beatInSection % 4 === 2;
+                    } else if (drumSection === 1) {
+                        playSnare = beatInSection % 4 === 2 || beatInSection % 8 === 7;
+                    } else {
+                        playSnare = beatInSection % 4 === 1 || beatInSection % 4 === 3;
+                    }
+
+                    if (playSnare) {
                         const snare = ctx.createOscillator();
                         const snareGain = ctx.createGain();
                         snare.type = 'triangle';
                         snare.frequency.setValueAtTime(200, ctx.currentTime);
                         snare.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
-                        snareGain.gain.setValueAtTime(0.4, ctx.currentTime);
+                        snareGain.gain.setValueAtTime(0.35, ctx.currentTime);
                         snareGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
                         snare.connect(snareGain);
                         snareGain.connect(this.musicGain);
                         snare.start();
                         snare.stop(ctx.currentTime + 0.11);
 
-                        // Snare noise
                         const noise = ctx.createBufferSource();
                         noise.buffer = this.createNoise(0.1, 2);
                         const noiseGain = ctx.createGain();
                         const filter = ctx.createBiquadFilter();
                         filter.type = 'highpass';
                         filter.frequency.value = 1000;
-                        noiseGain.gain.value = 0.35;
+                        noiseGain.gain.value = 0.3;
                         noise.connect(filter);
                         filter.connect(noiseGain);
                         noiseGain.connect(this.musicGain);
                         noise.start();
                     }
 
-                    // Hi-hat on every beat
-                    const hihat = ctx.createBufferSource();
-                    hihat.buffer = this.createNoise(0.03, 3);
-                    const hihatGain = ctx.createGain();
-                    const hihatFilter = ctx.createBiquadFilter();
-                    hihatFilter.type = 'highpass';
-                    hihatFilter.frequency.value = 8000;
-                    hihatGain.gain.value = 0.25;
-                    hihat.connect(hihatFilter);
-                    hihatFilter.connect(hihatGain);
-                    hihatGain.connect(this.musicGain);
-                    hihat.start();
+                    // Hi-hat varies
+                    const hihatVol = (drumSection === 2) ? 0.15 : 0.22;
+                    if (drumSection !== 2 || beatInSection % 2 === 0) {
+                        const hihat = ctx.createBufferSource();
+                        hihat.buffer = this.createNoise(0.03, 3);
+                        const hihatGain = ctx.createGain();
+                        const hihatFilter = ctx.createBiquadFilter();
+                        hihatFilter.type = 'highpass';
+                        hihatFilter.frequency.value = 8000;
+                        hihatGain.gain.value = hihatVol;
+                        hihat.connect(hihatFilter);
+                        hihatFilter.connect(hihatGain);
+                        hihatGain.connect(this.musicGain);
+                        hihat.start();
+                    }
 
-                    drumBeat = (drumBeat + 1) % 8;
+                    drumBeat++;
                 };
                 const drumInt = setInterval(playDrums, 150);
                 this.currentMusic.intervals.push(drumInt);
 
-                // ========== EPIC MELODY (Fantasy style) ==========
-                const melodyNotes = [330, 392, 440, 392, 330, 294, 330, 392, 523, 494, 440, 392, 330, 294, 262, 294];
+                // ========== EPIC MELODY (96 notes = ~29 seconds, multiple themes) ==========
+                const melodyNotes = [
+                    // Theme A - Heroic
+                    330, 392, 440, 392, 330, 294, 330, 392,
+                    440, 494, 523, 494, 440, 392, 330, 294,
+                    // Theme A variation
+                    330, 349, 392, 440, 494, 440, 392, 349,
+                    330, 294, 262, 294, 330, 392, 440, 392,
+                    // Theme B - Mysterious
+                    262, 294, 330, 262, 294, 349, 330, 294,
+                    262, 247, 220, 247, 262, 294, 330, 349,
+                    // Theme B variation
+                    392, 349, 330, 294, 262, 294, 330, 349,
+                    392, 440, 494, 440, 392, 349, 330, 294,
+                    // Theme C - Triumphant
+                    523, 494, 440, 392, 440, 494, 523, 587,
+                    659, 587, 523, 494, 440, 392, 349, 330,
+                    // Resolution
+                    294, 330, 392, 440, 392, 330, 294, 262,
+                    294, 330, 349, 392, 440, 494, 523, 494
+                ];
                 let melodyIndex = 0;
+                let melodyRest = 0;
                 const playMelody = () => {
                     if (!this.currentMusic) return;
+
+                    // Occasional rests for breathing room
+                    if (melodyRest > 0) {
+                        melodyRest--;
+                        return;
+                    }
+                    if (Math.random() < 0.1) {
+                        melodyRest = 1;
+                        return;
+                    }
+
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
                     osc.type = 'square';
                     osc.frequency.value = melodyNotes[melodyIndex];
                     gain.gain.setValueAtTime(0, ctx.currentTime);
-                    gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.02);
-                    gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.2);
+                    gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+                    gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.2);
                     gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.35);
                     osc.connect(gain);
                     gain.connect(this.musicGain);
@@ -1304,56 +1377,127 @@
                 const melodyInt = setInterval(playMelody, 300);
                 this.currentMusic.intervals.push(melodyInt);
 
-                // ========== POWER CHORDS (every 2 bars) ==========
+                // ========== CHORD PROGRESSIONS (16 chords = ~19 seconds) ==========
                 let chordBeat = 0;
+                const chordProgressions = [
+                    // Section 1 - Minor feel
+                    [110, 165, 220], [98, 147, 196], [82, 123, 165], [92, 138, 185],
+                    // Section 2 - Building
+                    [110, 165, 220], [123, 185, 247], [147, 220, 294], [165, 247, 330],
+                    // Section 3 - Peak
+                    [147, 220, 294], [165, 247, 330], [185, 277, 370], [165, 247, 330],
+                    // Section 4 - Resolution
+                    [147, 220, 294], [123, 185, 247], [110, 165, 220], [98, 147, 196]
+                ];
                 const playChords = () => {
                     if (!this.currentMusic) return;
-                    const chords = [
-                        [110, 165, 220],
-                        [98, 147, 196],
-                        [82, 123, 165],
-                        [110, 165, 220]
-                    ];
-                    const chord = chords[chordBeat % chords.length];
-                    chord.forEach(freq => {
+                    const chord = chordProgressions[chordBeat % chordProgressions.length];
+                    chord.forEach((freq, i) => {
                         const osc = ctx.createOscillator();
                         const gain = ctx.createGain();
                         osc.type = 'sawtooth';
                         osc.frequency.value = freq;
-                        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-                        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                        const vol = 0.2 - i * 0.03;
+                        gain.gain.setValueAtTime(vol, ctx.currentTime);
+                        gain.gain.linearRampToValueAtTime(vol * 0.8, ctx.currentTime + 0.1);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
                         osc.connect(gain);
                         gain.connect(this.musicGain);
                         osc.start();
-                        osc.stop(ctx.currentTime + 0.51);
+                        osc.stop(ctx.currentTime + 0.61);
                     });
                     chordBeat++;
                 };
                 const chordInt = setInterval(playChords, 1200);
                 this.currentMusic.intervals.push(chordInt);
-                playChords(); // Play first immediately
+                playChords();
 
-                // ========== STRING STABS ==========
-                const playStab = () => {
+                // ========== AMBIENT PADS (8 different pads = ~64 seconds total) ==========
+                let padIndex = 0;
+                const padNotes = [
+                    [220, 330, 440], [196, 294, 392], [185, 277, 370], [165, 247, 330],
+                    [220, 349, 440], [196, 311, 392], [175, 262, 349], [165, 262, 330]
+                ];
+                const playPad = () => {
                     if (!this.currentMusic) return;
-                    if (Math.random() > 0.3) return; // Random stabs
-                    const notes = [523, 659, 784];
+                    const notes = padNotes[padIndex % padNotes.length];
+                    notes.forEach(freq => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0, ctx.currentTime);
+                        gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 1);
+                        gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 6);
+                        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 8);
+                        osc.connect(gain);
+                        gain.connect(this.musicGain);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 8.1);
+                    });
+                    padIndex++;
+                };
+                const padInt = setInterval(playPad, 8000);
+                this.currentMusic.intervals.push(padInt);
+                playPad();
+
+                // ========== ARPEGGIOS (plays occasionally for variety) ==========
+                let arpSection = 0;
+                const arpPatterns = [
+                    [262, 330, 392, 523, 392, 330],
+                    [294, 349, 440, 587, 440, 349],
+                    [330, 392, 494, 659, 494, 392],
+                    [247, 311, 370, 494, 370, 311]
+                ];
+                const playArpeggio = () => {
+                    if (!this.currentMusic) return;
+                    if (Math.random() > 0.5) return; // 50% chance to play
+
+                    const pattern = arpPatterns[arpSection % arpPatterns.length];
+                    pattern.forEach((freq, i) => {
+                        setTimeout(() => {
+                            if (!this.currentMusic) return;
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.value = freq;
+                            gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                            osc.connect(gain);
+                            gain.connect(this.musicGain);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.21);
+                        }, i * 80);
+                    });
+                    arpSection++;
+                };
+                const arpInt = setInterval(playArpeggio, 2400);
+                this.currentMusic.intervals.push(arpInt);
+
+                // ========== EPIC HITS (occasional dramatic accents) ==========
+                let hitCounter = 0;
+                const playHit = () => {
+                    if (!this.currentMusic) return;
+                    hitCounter++;
+                    // Only play on certain intervals for variety
+                    if (hitCounter % 8 !== 0) return;
+
+                    const notes = [110, 220, 330, 440];
                     notes.forEach(freq => {
                         const osc = ctx.createOscillator();
                         const gain = ctx.createGain();
                         osc.type = 'sawtooth';
                         osc.frequency.value = freq;
-                        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
                         osc.connect(gain);
                         gain.connect(this.musicGain);
                         osc.start();
-                        osc.stop(ctx.currentTime + 0.11);
+                        osc.stop(ctx.currentTime + 0.31);
                     });
                 };
-                const stabInt = setInterval(playStab, 600);
-                this.currentMusic.intervals.push(stabInt);
+                const hitInt = setInterval(playHit, 1200);
+                this.currentMusic.intervals.push(hitInt);
             }
 
             stopMusic() {
@@ -1611,6 +1755,9 @@
                 this.isMoving = false;
                 this.muzzleFlash = 0;
                 this.landSquash = 0;
+
+                // Direction facing (true = right, false = left)
+                this.facingRight = true;
             }
 
             draw() {
@@ -1637,11 +1784,12 @@
 
                 // Apply squash and stretch and recoil
                 ctx.save();
-                const drawX = this.x - this.recoil;
+                const recoilDir = this.facingRight ? -this.recoil : this.recoil;
+                const drawX = this.x + recoilDir;
                 const bobOffset = this.isMoving && !this.isJumping ? Math.sin(this.bobTime * 15) * 2 : 0;
 
                 ctx.translate(drawX + this.width / 2, this.y + this.height);
-                ctx.scale(this.squashX, this.squashY);
+                ctx.scale(this.squashX * (this.facingRight ? 1 : -1), this.squashY);
                 ctx.translate(-(drawX + this.width / 2), -(this.y + this.height));
 
                 // Draw muzzle flash (pixelated)
@@ -1766,10 +1914,12 @@
                 if (keys['a'] || keys['arrowleft']) {
                     this.x -= this.speed * deltaTime;
                     this.isMoving = true;
+                    this.facingRight = false;
                 }
                 if (keys['d'] || keys['arrowright']) {
                     this.x += this.speed * deltaTime;
                     this.isMoving = true;
+                    this.facingRight = true;
                 }
 
                 // Update bob
@@ -1896,12 +2046,21 @@
             }
 
             getPunchHitbox() {
-                return {
-                    x: this.x + this.width - 5,
-                    y: this.y + 10,
-                    width: 30,
-                    height: 40
-                };
+                if (this.facingRight) {
+                    return {
+                        x: this.x + this.width - 5,
+                        y: this.y + 10,
+                        width: 30,
+                        height: 40
+                    };
+                } else {
+                    return {
+                        x: this.x - 25,
+                        y: this.y + 10,
+                        width: 30,
+                        height: 40
+                    };
+                }
             }
 
             getSmashCenter() {
@@ -1913,17 +2072,67 @@
         }
 
         // ============================================
+        // ZOMBIE TYPES
+        // ============================================
+        const ZOMBIE_TYPE = {
+            NORMAL: 'normal',
+            FAST: 'fast',
+            RADIOACTIVE: 'radioactive',
+            JUMPING: 'jumping',
+            LARGE: 'large'
+        };
+
+        // ============================================
         // ZOMBIE CLASS
         // ============================================
         class Zombie {
-            constructor() {
-                this.width = 35;
-                this.height = 55;
+            constructor(type = ZOMBIE_TYPE.NORMAL) {
+                this.type = type;
+                this.baseSpeed = CANVAS_WIDTH / ZOMBIE_TRAVEL_TIME;
+
+                // Set properties based on type
+                switch (type) {
+                    case ZOMBIE_TYPE.FAST:
+                        this.width = 30;
+                        this.height = 50;
+                        this.health = 80;
+                        this.speed = this.baseSpeed * 2;
+                        break;
+                    case ZOMBIE_TYPE.RADIOACTIVE:
+                        this.width = 35;
+                        this.height = 55;
+                        this.health = 100;
+                        this.speed = this.baseSpeed;
+                        this.radioactiveRadius = 80;
+                        this.hasExploded = false;
+                        break;
+                    case ZOMBIE_TYPE.JUMPING:
+                        this.width = 35;
+                        this.height = 55;
+                        this.health = 100;
+                        this.speed = this.baseSpeed;
+                        this.jumpTimer = Math.random() * 1000;
+                        this.jumpInterval = 1500 + Math.random() * 500;
+                        this.velocityY = 0;
+                        this.isJumping = false;
+                        break;
+                    case ZOMBIE_TYPE.LARGE:
+                        this.width = 105; // 3x width
+                        this.height = 165; // 3x height
+                        this.health = 200;
+                        this.speed = this.baseSpeed / 1.5;
+                        break;
+                    default: // NORMAL
+                        this.width = 35;
+                        this.height = 55;
+                        this.health = ZOMBIE_HEALTH;
+                        this.speed = this.baseSpeed;
+                }
+
+                this.maxHealth = this.health;
                 this.x = CANVAS_WIDTH;
-                this.y = CANVAS_HEIGHT - this.height;
-                this.health = ZOMBIE_HEALTH;
-                this.maxHealth = ZOMBIE_HEALTH;
-                this.speed = CANVAS_WIDTH / ZOMBIE_TRAVEL_TIME;
+                this.groundY = CANVAS_HEIGHT - this.height;
+                this.y = this.groundY;
                 this.wobble = 0;
                 this.dead = false;
                 this.fadeOut = 1;
@@ -1939,16 +2148,19 @@
                 this.squashY = 1;
                 this.deathRotation = 0;
                 this.deathVelocityY = 0;
+
+                // Scale factor for drawing
+                this.scale = type === ZOMBIE_TYPE.LARGE ? 3 : 1;
             }
 
             draw() {
                 ctx.globalAlpha = this.fadeOut;
-                const p = 4; // Pixel size for Terraria style
+                const p = 4 * this.scale; // Pixel size scaled for zombie type
 
-                const wobbleOffset = Math.sin(this.wobble) * 2;
+                const wobbleOffset = Math.sin(this.wobble) * 2 * this.scale;
 
                 // Attack animation - lunge forward
-                const attackOffset = this.isAttacking ? -5 : 0;
+                const attackOffset = (this.isAttacking ? -5 : 0) * this.scale;
 
                 // Apply knockback and squash
                 ctx.save();
@@ -1966,83 +2178,151 @@
                 // TERRARIA-STYLE PIXELATED ZOMBIE
                 const baseY = this.y + wobbleOffset;
 
-                // Zombie skin colors
-                const skinColor = flashMix > 0 ? this.mixColors('#7a9a7a', '#ffffff', flashMix) : '#7a9a7a';
-                const skinDark = flashMix > 0 ? this.mixColors('#5a7a5a', '#ffffff', flashMix) : '#5a7a5a';
-                const clothColor = flashMix > 0 ? this.mixColors('#4a5a6a', '#ffffff', flashMix) : '#4a5a6a';
-                const clothDark = flashMix > 0 ? this.mixColors('#3a4a5a', '#ffffff', flashMix) : '#3a4a5a';
+                // Get colors based on zombie type
+                let skinColor, skinDark, clothColor, clothDark, eyeColor, eyeGlow;
+
+                switch (this.type) {
+                    case ZOMBIE_TYPE.FAST:
+                        // Fast zombie - pale blue/white, lean
+                        skinColor = flashMix > 0 ? this.mixColors('#9ab0c0', '#ffffff', flashMix) : '#9ab0c0';
+                        skinDark = flashMix > 0 ? this.mixColors('#7090a0', '#ffffff', flashMix) : '#7090a0';
+                        clothColor = flashMix > 0 ? this.mixColors('#3a4a5a', '#ffffff', flashMix) : '#3a4a5a';
+                        clothDark = flashMix > 0 ? this.mixColors('#2a3a4a', '#ffffff', flashMix) : '#2a3a4a';
+                        eyeColor = '#00ffff';
+                        eyeGlow = 'rgba(0, 255, 255, 0.4)';
+                        break;
+                    case ZOMBIE_TYPE.RADIOACTIVE:
+                        // Radioactive zombie - glowing green
+                        skinColor = flashMix > 0 ? this.mixColors('#50ff50', '#ffffff', flashMix) : '#50ff50';
+                        skinDark = flashMix > 0 ? this.mixColors('#30cc30', '#ffffff', flashMix) : '#30cc30';
+                        clothColor = flashMix > 0 ? this.mixColors('#404040', '#ffffff', flashMix) : '#404040';
+                        clothDark = flashMix > 0 ? this.mixColors('#303030', '#ffffff', flashMix) : '#303030';
+                        eyeColor = '#ffff00';
+                        eyeGlow = 'rgba(100, 255, 100, 0.5)';
+                        // Draw radioactive glow around zombie
+                        ctx.fillStyle = 'rgba(80, 255, 80, 0.15)';
+                        ctx.beginPath();
+                        ctx.arc(drawX + this.width/2, this.y + this.height/2, this.width, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case ZOMBIE_TYPE.JUMPING:
+                        // Jumping zombie - reddish/demonic
+                        skinColor = flashMix > 0 ? this.mixColors('#c07070', '#ffffff', flashMix) : '#c07070';
+                        skinDark = flashMix > 0 ? this.mixColors('#905050', '#ffffff', flashMix) : '#905050';
+                        clothColor = flashMix > 0 ? this.mixColors('#5a3030', '#ffffff', flashMix) : '#5a3030';
+                        clothDark = flashMix > 0 ? this.mixColors('#402020', '#ffffff', flashMix) : '#402020';
+                        eyeColor = '#ff0000';
+                        eyeGlow = 'rgba(255, 0, 0, 0.5)';
+                        break;
+                    case ZOMBIE_TYPE.LARGE:
+                        // Large zombie - darker, more menacing
+                        skinColor = flashMix > 0 ? this.mixColors('#5a6a5a', '#ffffff', flashMix) : '#5a6a5a';
+                        skinDark = flashMix > 0 ? this.mixColors('#3a4a3a', '#ffffff', flashMix) : '#3a4a3a';
+                        clothColor = flashMix > 0 ? this.mixColors('#3a3a4a', '#ffffff', flashMix) : '#3a3a4a';
+                        clothDark = flashMix > 0 ? this.mixColors('#2a2a3a', '#ffffff', flashMix) : '#2a2a3a';
+                        eyeColor = '#ff4400';
+                        eyeGlow = 'rgba(255, 100, 0, 0.5)';
+                        break;
+                    default: // NORMAL
+                        skinColor = flashMix > 0 ? this.mixColors('#7a9a7a', '#ffffff', flashMix) : '#7a9a7a';
+                        skinDark = flashMix > 0 ? this.mixColors('#5a7a5a', '#ffffff', flashMix) : '#5a7a5a';
+                        clothColor = flashMix > 0 ? this.mixColors('#4a5a6a', '#ffffff', flashMix) : '#4a5a6a';
+                        clothDark = flashMix > 0 ? this.mixColors('#3a4a5a', '#ffffff', flashMix) : '#3a4a5a';
+                        eyeColor = '#ff2200';
+                        eyeGlow = 'rgba(255, 50, 0, 0.4)';
+                }
+
+                // Scale all positions
+                const s = this.scale;
 
                 // Feet (bare/rotting)
                 ctx.fillStyle = skinDark;
-                ctx.fillRect(drawX + 6 + attackOffset, baseY + 48, p*2, p*2);
-                ctx.fillRect(drawX + 22 + attackOffset, baseY + 48, p*2, p*2);
+                ctx.fillRect(drawX + 6*s + attackOffset, baseY + 48*s, p*2, p*2);
+                ctx.fillRect(drawX + 22*s + attackOffset, baseY + 48*s, p*2, p*2);
 
                 // Legs (tattered pants)
                 ctx.fillStyle = clothDark;
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 38, p*2, p*3);
-                ctx.fillRect(drawX + 20 + attackOffset, baseY + 38, p*2, p*3);
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 38*s, p*2, p*3);
+                ctx.fillRect(drawX + 20*s + attackOffset, baseY + 38*s, p*2, p*3);
 
                 // Torn fabric pixels
                 ctx.fillStyle = clothColor;
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 38, p, p*2);
-                ctx.fillRect(drawX + 22 + attackOffset, baseY + 40, p, p*2);
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 38*s, p, p*2);
+                ctx.fillRect(drawX + 22*s + attackOffset, baseY + 40*s, p, p*2);
 
                 // Body (torn shirt)
                 ctx.fillStyle = clothColor;
-                ctx.fillRect(drawX + 4 + attackOffset, baseY + 18, p*7, p*5);
+                ctx.fillRect(drawX + 4*s + attackOffset, baseY + 18*s, p*7, p*5);
 
                 // Body shading/tears
                 ctx.fillStyle = clothDark;
-                ctx.fillRect(drawX + 4 + attackOffset, baseY + 22, p*2, p*3);
-                ctx.fillRect(drawX + 20 + attackOffset, baseY + 26, p*2, p*2);
+                ctx.fillRect(drawX + 4*s + attackOffset, baseY + 22*s, p*2, p*3);
+                ctx.fillRect(drawX + 20*s + attackOffset, baseY + 26*s, p*2, p*2);
 
                 // Exposed skin through tears
                 ctx.fillStyle = skinColor;
-                ctx.fillRect(drawX + 12 + attackOffset, baseY + 24, p*2, p*2);
+                ctx.fillRect(drawX + 12*s + attackOffset, baseY + 24*s, p*2, p*2);
 
-                // Head (zombie green)
+                // Head (zombie)
                 ctx.fillStyle = skinColor;
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 2, p*5, p*4);
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 2*s, p*5, p*4);
 
                 // Head shading
                 ctx.fillStyle = skinDark;
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 2, p, p*4);
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 14, p*5, p);
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 2*s, p, p*4);
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 14*s, p*5, p);
 
-                // Messy hair
-                ctx.fillStyle = '#3a4a3a';
-                ctx.fillRect(drawX + 6 + attackOffset, baseY, p*6, p);
-                ctx.fillRect(drawX + 4 + attackOffset, baseY + 2, p, p*2);
-                ctx.fillRect(drawX + 26 + attackOffset, baseY + 2, p, p);
+                // Messy hair (different for each type)
+                ctx.fillStyle = this.type === ZOMBIE_TYPE.RADIOACTIVE ? '#205020' :
+                               this.type === ZOMBIE_TYPE.FAST ? '#506070' :
+                               this.type === ZOMBIE_TYPE.JUMPING ? '#402020' :
+                               this.type === ZOMBIE_TYPE.LARGE ? '#202020' : '#3a4a3a';
+                ctx.fillRect(drawX + 6*s + attackOffset, baseY, p*6, p);
+                ctx.fillRect(drawX + 4*s + attackOffset, baseY + 2*s, p, p*2);
+                ctx.fillRect(drawX + 26*s + attackOffset, baseY + 2*s, p, p);
 
-                // Glowing red eyes
-                ctx.fillStyle = '#ff2200';
-                ctx.fillRect(drawX + 10 + attackOffset, baseY + 6, p, p);
-                ctx.fillRect(drawX + 18 + attackOffset, baseY + 6, p, p);
+                // Type-specific features
+                if (this.type === ZOMBIE_TYPE.JUMPING) {
+                    // Horns for jumping zombie
+                    ctx.fillStyle = '#402020';
+                    ctx.fillRect(drawX + 6*s + attackOffset, baseY - 4*s, p, p*2);
+                    ctx.fillRect(drawX + 24*s + attackOffset, baseY - 4*s, p, p*2);
+                }
+                if (this.type === ZOMBIE_TYPE.LARGE) {
+                    // Spikes on shoulders for large zombie
+                    ctx.fillStyle = '#3a3a3a';
+                    ctx.fillRect(drawX + 2*s + attackOffset, baseY + 16*s, p, p*2);
+                    ctx.fillRect(drawX + 30*s + attackOffset, baseY + 16*s, p, p*2);
+                }
+
+                // Glowing eyes
+                ctx.fillStyle = eyeColor;
+                ctx.fillRect(drawX + 10*s + attackOffset, baseY + 6*s, p, p);
+                ctx.fillRect(drawX + 18*s + attackOffset, baseY + 6*s, p, p);
 
                 // Eye glow effect
-                ctx.fillStyle = 'rgba(255, 50, 0, 0.4)';
-                ctx.fillRect(drawX + 8 + attackOffset, baseY + 4, p*2, p*2);
-                ctx.fillRect(drawX + 16 + attackOffset, baseY + 4, p*2, p*2);
+                ctx.fillStyle = eyeGlow;
+                ctx.fillRect(drawX + 8*s + attackOffset, baseY + 4*s, p*2, p*2);
+                ctx.fillRect(drawX + 16*s + attackOffset, baseY + 4*s, p*2, p*2);
 
                 // Mouth/teeth
                 ctx.fillStyle = '#2a2a2a';
-                ctx.fillRect(drawX + 12 + attackOffset, baseY + 12, p*2, p);
+                ctx.fillRect(drawX + 12*s + attackOffset, baseY + 12*s, p*2, p);
                 ctx.fillStyle = '#dddddd';
-                ctx.fillRect(drawX + 13 + attackOffset, baseY + 12, 2, 2);
-                ctx.fillRect(drawX + 17 + attackOffset, baseY + 12, 2, 2);
+                ctx.fillRect(drawX + 13*s + attackOffset, baseY + 12*s, 2*s, 2*s);
+                ctx.fillRect(drawX + 17*s + attackOffset, baseY + 12*s, 2*s, 2*s);
 
                 // Arms reaching forward
                 ctx.fillStyle = skinColor;
-                const armExtend = this.isAttacking ? -10 : -4;
-                ctx.fillRect(drawX + armExtend + attackOffset, baseY + 20, p*3, p*2);
-                ctx.fillRect(drawX + armExtend - 4 + attackOffset, baseY + 22, p*2, p*2);
+                const armExtend = (this.isAttacking ? -10 : -4) * s;
+                ctx.fillRect(drawX + armExtend + attackOffset, baseY + 20*s, p*3, p*2);
+                ctx.fillRect(drawX + armExtend - 4*s + attackOffset, baseY + 22*s, p*2, p*2);
 
                 // Claw hand
                 ctx.fillStyle = skinDark;
-                ctx.fillRect(drawX + armExtend - 6 + attackOffset, baseY + 20, p, p);
-                ctx.fillRect(drawX + armExtend - 6 + attackOffset, baseY + 24, p, p);
-                ctx.fillRect(drawX + armExtend - 6 + attackOffset, baseY + 28, p, p);
+                ctx.fillRect(drawX + armExtend - 6*s + attackOffset, baseY + 20*s, p, p);
+                ctx.fillRect(drawX + armExtend - 6*s + attackOffset, baseY + 24*s, p, p);
+                ctx.fillRect(drawX + armExtend - 6*s + attackOffset, baseY + 28*s, p, p);
 
                 ctx.restore(); // Restore from squash/knockback transform
                 ctx.globalAlpha = 1;
@@ -2050,6 +2330,14 @@
                 // Health bar (only if alive and damaged)
                 if (!this.dead && this.health < this.maxHealth) {
                     this.drawHealthBar();
+                }
+
+                // Draw radioactive warning indicator
+                if (this.type === ZOMBIE_TYPE.RADIOACTIVE && !this.dead) {
+                    ctx.fillStyle = 'rgba(100, 255, 100, ' + (0.3 + Math.sin(this.wobble * 2) * 0.2) + ')';
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, 5, 0, Math.PI * 2);
+                    ctx.fill();
                 }
             }
 
@@ -2067,24 +2355,44 @@
             }
 
             drawHealthBar() {
-                const barWidth = 30;
-                const barHeight = 5;
+                const barWidth = 30 * this.scale;
+                const barHeight = 5 * this.scale;
                 const barX = this.x + (this.width - barWidth) / 2;
-                const barY = this.y - 10;
+                const barY = this.y - 10 * this.scale;
 
                 // Background
                 ctx.fillStyle = '#333';
                 ctx.fillRect(barX, barY, barWidth, barHeight);
 
-                // Health
+                // Health - color based on type
                 const healthPercent = this.health / this.maxHealth;
-                ctx.fillStyle = healthPercent > 0.5 ? '#4CAF50' : healthPercent > 0.25 ? '#FF9800' : '#f44336';
+                let healthColor;
+                if (this.type === ZOMBIE_TYPE.RADIOACTIVE) {
+                    healthColor = '#50ff50';
+                } else if (this.type === ZOMBIE_TYPE.FAST) {
+                    healthColor = '#50ffff';
+                } else {
+                    healthColor = healthPercent > 0.5 ? '#4CAF50' : healthPercent > 0.25 ? '#FF9800' : '#f44336';
+                }
+                ctx.fillStyle = healthColor;
                 ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
 
                 // Border
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+                // Type indicator for special zombies
+                if (this.type !== ZOMBIE_TYPE.NORMAL) {
+                    ctx.font = (8 * this.scale) + 'px Courier New';
+                    ctx.fillStyle = '#fff';
+                    ctx.textAlign = 'center';
+                    const label = this.type === ZOMBIE_TYPE.FAST ? 'FAST' :
+                                 this.type === ZOMBIE_TYPE.RADIOACTIVE ? 'RAD' :
+                                 this.type === ZOMBIE_TYPE.JUMPING ? 'JUMP' :
+                                 this.type === ZOMBIE_TYPE.LARGE ? 'BOSS' : '';
+                    ctx.fillText(label, this.x + this.width/2, barY - 2);
+                }
             }
 
             update(deltaTime, currentTime, base) {
@@ -2100,15 +2408,51 @@
                     this.deathRotation += deltaTime * 5;
                     this.deathVelocityY += 500 * deltaTime;
                     this.y += this.deathVelocityY * deltaTime;
-                    return { remove: this.fadeOut <= 0 || this.y > CANVAS_HEIGHT + 50, damage: 0 };
+                    return { remove: this.fadeOut <= 0 || this.y > CANVAS_HEIGHT + 50, damage: 0, radioactiveDeath: false };
                 }
 
                 this.wobble += deltaTime * 8;
                 this.isAttacking = false;
 
+                // Jumping zombie behavior
+                if (this.type === ZOMBIE_TYPE.JUMPING && !this.atBase) {
+                    this.jumpTimer += deltaTime * 1000;
+
+                    // Jump periodically
+                    if (this.jumpTimer >= this.jumpInterval && !this.isJumping) {
+                        this.isJumping = true;
+                        this.velocityY = -350;
+                        this.jumpTimer = 0;
+                    }
+
+                    // Apply gravity
+                    if (this.isJumping || this.y < this.groundY) {
+                        this.velocityY += 800 * deltaTime;
+                        this.y += this.velocityY * deltaTime;
+
+                        if (this.y >= this.groundY) {
+                            this.y = this.groundY;
+                            this.velocityY = 0;
+                            this.isJumping = false;
+                        }
+                    }
+                }
+
                 // If at base, attack periodically
                 if (this.atBase) {
                     const timeSinceReached = currentTime - this.reachedBaseTime;
+
+                    // Radioactive zombie explodes after 10 seconds at base
+                    if (this.type === ZOMBIE_TYPE.RADIOACTIVE && timeSinceReached >= 10000 && !this.hasExploded) {
+                        this.hasExploded = true;
+                        this.dead = true;
+                        return { remove: false, damage: 50, radioactiveExplosion: true };
+                    }
+
+                    // Normal disappear after 10 seconds (non-radioactive)
+                    if (this.type !== ZOMBIE_TYPE.RADIOACTIVE && timeSinceReached >= 10000) {
+                        return { remove: true, damage: 0, radioactiveDeath: false };
+                    }
 
                     // Wait 1 second before first attack
                     if (timeSinceReached >= ZOMBIE_ATTACK_DELAY) {
@@ -2116,10 +2460,10 @@
                         if (currentTime - this.lastAttackTime >= ZOMBIE_ATTACK_INTERVAL) {
                             this.lastAttackTime = currentTime;
                             this.isAttacking = true;
-                            return { remove: false, damage: ZOMBIE_BASE_DAMAGE };
+                            return { remove: false, damage: ZOMBIE_BASE_DAMAGE, radioactiveDeath: false };
                         }
                     }
-                    return { remove: false, damage: 0 };
+                    return { remove: false, damage: 0, radioactiveDeath: false };
                 }
 
                 // Move toward base
@@ -2132,24 +2476,32 @@
                     this.reachedBaseTime = currentTime;
                 }
 
-                return { remove: false, damage: 0 };
+                return { remove: false, damage: 0, radioactiveDeath: false };
             }
 
             takeDamage(amount, knockbackAmount = 15) {
                 this.health -= amount;
 
-                // Hit juice
-                this.knockback = knockbackAmount;
+                // Hit juice - scale knockback for large zombies
+                this.knockback = knockbackAmount / this.scale;
                 this.hitFlash = 1;
                 this.squashX = 1.3;
                 this.squashY = 0.7;
 
                 if (this.health <= 0) {
                     this.dead = true;
-                    this.deathVelocityY = -150;
-                    return true;
+                    this.deathVelocityY = -150 / this.scale;
+                    return { died: true, isRadioactive: this.type === ZOMBIE_TYPE.RADIOACTIVE };
                 }
-                return false;
+                return { died: false, isRadioactive: false };
+            }
+
+            // Get center position for radioactive effect
+            getCenter() {
+                return {
+                    x: this.x + this.width / 2,
+                    y: this.y + this.height / 2
+                };
             }
 
             getHitbox() {
@@ -2166,9 +2518,10 @@
         // PROJECTILE CLASS
         // ============================================
         class Projectile {
-            constructor(x, y) {
+            constructor(x, y, direction = 1) {
                 this.x = x;
                 this.y = y;
+                this.direction = direction; // 1 = right, -1 = left
                 this.width = 10;
                 this.height = 5;
                 this.speed = PROJECTILE_SPEED;
@@ -2225,8 +2578,9 @@
                     this.trail.shift();
                 }
 
-                this.x += this.speed * deltaTime;
-                return this.x > CANVAS_WIDTH;
+                this.x += this.speed * deltaTime * this.direction;
+                // Remove if off screen (either side)
+                return this.x > CANVAS_WIDTH || this.x < 0;
             }
 
             getHitbox() {
@@ -2267,6 +2621,13 @@
 
                 // Terraria-style background
                 this.background = new Background();
+
+                // Player slowdown from radioactive zombies
+                this.playerSlowedUntil = 0;
+                this.playerNormalSpeed = PLAYER_SPEED;
+
+                // Track score for large zombie spawning (every 100 points)
+                this.lastLargeZombieScore = 0;
 
                 this.setupInput();
             }
@@ -2398,22 +2759,57 @@
                     let hitCount = 0;
                     this.zombies.forEach(zombie => {
                         if (!zombie.dead && this.checkCollision(punchBox, zombie.getHitbox())) {
-                            const killed = zombie.takeDamage(PUNCH_DAMAGE, 20);
+                            const result = zombie.takeDamage(PUNCH_DAMAGE, 20);
                             soundManager.playHit(0.8 + Math.random() * 0.4);
-                            if (killed) {
-                                this.score += KILL_SCORE;
+                            if (result.died) {
+                                this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
                                 this.highScore = Math.max(this.highScore, this.score);
                                 this.screenEffects.hitstop(0.05);
                                 this.screenEffects.shake(6, 0.15);
                                 soundManager.playZombieDeath();
 
+                                // Check for radioactive death - slow player if nearby
+                                if (result.isRadioactive) {
+                                    const zombieCenter = zombie.getCenter();
+                                    const playerCenter = {
+                                        x: this.player.x + this.player.width / 2,
+                                        y: this.player.y + this.player.height / 2
+                                    };
+                                    const dist = Math.sqrt(
+                                        Math.pow(zombieCenter.x - playerCenter.x, 2) +
+                                        Math.pow(zombieCenter.y - playerCenter.y, 2)
+                                    );
+                                    if (dist <= zombie.radioactiveRadius) {
+                                        this.playerSlowedUntil = performance.now() + 5000;
+                                        this.screenEffects.flash('rgba(50, 255, 50, 0.4)', 0.5);
+                                    }
+                                    // Radioactive death particles
+                                    this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 20, {
+                                        angle: Math.PI / 2,
+                                        spread: Math.PI * 2,
+                                        speed: 150,
+                                        colors: ['#50ff50', '#30cc30', '#80ff80'],
+                                        size: 10,
+                                        life: 1.2,
+                                        gravity: 100,
+                                        friction: 0.98
+                                    });
+                                }
+
                                 // Death particles
-                                this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 15, {
+                                const deathColors = zombie.type === ZOMBIE_TYPE.RADIOACTIVE ?
+                                    ['#50ff50', '#30cc30', '#80ff80', '#8b0000'] :
+                                    zombie.type === ZOMBIE_TYPE.FAST ?
+                                    ['#9ab0c0', '#7090a0', '#c0d0e0', '#8b0000'] :
+                                    zombie.type === ZOMBIE_TYPE.LARGE ?
+                                    ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#8b0000'] :
+                                    ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'];
+                                this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 15 * zombie.scale, {
                                     angle: Math.PI / 2,
                                     spread: Math.PI,
                                     speed: 200,
-                                    colors: ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'],
-                                    size: 8,
+                                    colors: deathColors,
+                                    size: 8 * zombie.scale,
                                     life: 0.8,
                                     gravity: 400,
                                     friction: 0.98
@@ -2494,10 +2890,11 @@
                         friction: 0.99
                     });
 
-                    this.projectiles.push(new Projectile(
-                        this.player.x + this.player.width,
-                        this.player.y + 22
-                    ));
+                    const direction = this.player.facingRight ? 1 : -1;
+                    const bulletX = this.player.facingRight ?
+                        this.player.x + this.player.width :
+                        this.player.x;
+                    this.projectiles.push(new Projectile(bulletX, this.player.y + 22, direction));
                 }
             }
 
@@ -2585,19 +2982,44 @@
                         const knockbackAmount = 40 * (1 - distance / GROUND_SMASH_RADIUS);
 
                         soundManager.playHit(0.6 + Math.random() * 0.3);
-                        if (zombie.takeDamage(GROUND_SMASH_DAMAGE, knockbackAmount * knockbackDir)) {
-                            this.score += KILL_SCORE;
+                        const result = zombie.takeDamage(GROUND_SMASH_DAMAGE, knockbackAmount * knockbackDir);
+                        if (result.died) {
+                            this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
                             this.highScore = Math.max(this.highScore, this.score);
                             killCount++;
                             soundManager.playZombieDeath();
 
-                            // Death particles
-                            this.particles.emit(zombieCenter.x, zombieCenter.y, 20, {
+                            // Check for radioactive death - slow player (already in smash radius)
+                            if (result.isRadioactive) {
+                                this.playerSlowedUntil = performance.now() + 5000;
+                                this.screenEffects.flash('rgba(50, 255, 50, 0.4)', 0.5);
+                                // Radioactive death particles
+                                this.particles.emit(zombieCenter.x, zombieCenter.y, 20, {
+                                    angle: Math.PI / 2,
+                                    spread: Math.PI * 2,
+                                    speed: 150,
+                                    colors: ['#50ff50', '#30cc30', '#80ff80'],
+                                    size: 10,
+                                    life: 1.2,
+                                    gravity: 100,
+                                    friction: 0.98
+                                });
+                            }
+
+                            // Death particles - color based on type
+                            const deathColors = zombie.type === ZOMBIE_TYPE.RADIOACTIVE ?
+                                ['#50ff50', '#30cc30', '#80ff80', '#8b0000'] :
+                                zombie.type === ZOMBIE_TYPE.FAST ?
+                                ['#9ab0c0', '#7090a0', '#c0d0e0', '#8b0000'] :
+                                zombie.type === ZOMBIE_TYPE.LARGE ?
+                                ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#8b0000'] :
+                                ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'];
+                            this.particles.emit(zombieCenter.x, zombieCenter.y, 20 * zombie.scale, {
                                 angle: dx > 0 ? 0 : Math.PI,
                                 spread: Math.PI * 0.8,
                                 speed: 300,
-                                colors: ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'],
-                                size: 10,
+                                colors: deathColors,
+                                size: 10 * zombie.scale,
                                 life: 1,
                                 gravity: 400,
                                 friction: 0.97
@@ -2643,6 +3065,8 @@
                 this.particles.clear();
                 this.damageNumbers = [];
                 this.screenEffects = new ScreenEffects();
+                this.playerSlowedUntil = 0;
+                this.lastLargeZombieScore = 0;
                 soundManager.playBackgroundMusic();
             }
 
@@ -2671,6 +3095,13 @@
                 // Check if player was in air and just landed with ground smash
                 const wasInAir = this.player.y < this.player.groundY;
 
+                // Handle player slowdown from radioactive zombies
+                if (currentTime < this.playerSlowedUntil) {
+                    this.player.speed = this.playerNormalSpeed / 2;
+                } else {
+                    this.player.speed = this.playerNormalSpeed;
+                }
+
                 // Update player
                 this.player.update(deltaTime, this.keys);
 
@@ -2696,11 +3127,36 @@
                     this.pendingGroundSmash = false;
                 }
 
-                // Spawn zombies
+                // Spawn zombies with different types
                 if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
-                    this.zombies.push(new Zombie());
+                    // Determine zombie type based on probability
+                    // 60% normal, 10% fast, 10% radioactive, 10% jumping, 10% chance nothing (balanced)
+                    const roll = Math.random();
+                    let zombieType;
+                    if (roll < 0.60) {
+                        zombieType = ZOMBIE_TYPE.NORMAL;
+                    } else if (roll < 0.70) {
+                        zombieType = ZOMBIE_TYPE.FAST;
+                    } else if (roll < 0.80) {
+                        zombieType = ZOMBIE_TYPE.RADIOACTIVE;
+                    } else if (roll < 0.90) {
+                        zombieType = ZOMBIE_TYPE.JUMPING;
+                    } else {
+                        zombieType = ZOMBIE_TYPE.NORMAL; // Fill remaining 10% with normal
+                    }
+
+                    this.zombies.push(new Zombie(zombieType));
                     this.lastSpawnTime = currentTime;
                     this.spawnInterval = Math.max(MIN_SPAWN_INTERVAL, this.spawnInterval - SPAWN_ACCELERATION);
+                }
+
+                // Spawn large zombie every 100 points
+                if (this.score >= this.lastLargeZombieScore + 100) {
+                    this.zombies.push(new Zombie(ZOMBIE_TYPE.LARGE));
+                    this.lastLargeZombieScore = Math.floor(this.score / 100) * 100;
+                    // Visual feedback for boss spawn
+                    this.screenEffects.shake(5, 0.3);
+                    this.screenEffects.flash('rgba(100, 50, 0, 0.3)', 0.5);
                 }
 
                 // Update zombies
@@ -2709,8 +3165,49 @@
 
                     if (result.remove) return false;
 
+                    // Handle radioactive explosion
+                    if (result.radioactiveExplosion) {
+                        this.base.takeDamage(50);
+                        this.screenEffects.shake(15, 0.4);
+                        this.screenEffects.flash('rgba(50, 255, 50, 0.6)', 0.8);
+                        this.screenEffects.triggerEdgeFlash('#50ff50');
+
+                        // Big radioactive explosion particles
+                        this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 40, {
+                            angle: Math.PI / 2,
+                            spread: Math.PI * 2,
+                            speed: 250,
+                            colors: ['#50ff50', '#30cc30', '#80ff80', '#ffff00'],
+                            size: 12,
+                            life: 1.5,
+                            gravity: 200,
+                            friction: 0.97
+                        });
+
+                        // Check if player is nearby for slowdown
+                        const zombieCenter = zombie.getCenter();
+                        const playerCenter = {
+                            x: this.player.x + this.player.width / 2,
+                            y: this.player.y + this.player.height / 2
+                        };
+                        const dist = Math.sqrt(
+                            Math.pow(zombieCenter.x - playerCenter.x, 2) +
+                            Math.pow(zombieCenter.y - playerCenter.y, 2)
+                        );
+                        if (dist <= 150) { // Larger radius for explosion
+                            this.playerSlowedUntil = performance.now() + 5000;
+                        }
+
+                        if (this.base.health <= 0) {
+                            this.state = GAME_OVER;
+                            this.screenEffects.shake(20, 0.5);
+                            this.screenEffects.flash('rgba(255, 0, 0, 0.5)', 1);
+                            soundManager.playGameOver();
+                        }
+                    }
+
                     // Apply damage from zombie attacks
-                    if (result.damage > 0) {
+                    if (result.damage > 0 && !result.radioactiveExplosion) {
                         this.base.takeDamage(result.damage);
                         this.screenEffects.triggerEdgeFlash('#ff0000');
                         this.screenEffects.shake(3, 0.1);
@@ -2734,22 +3231,57 @@
                     const projHitbox = projectile.getHitbox();
                     for (let zombie of this.zombies) {
                         if (!zombie.dead && this.checkCollision(projHitbox, zombie.getHitbox())) {
-                            const killed = zombie.takeDamage(projectile.damage, 30);
+                            const result = zombie.takeDamage(projectile.damage, 30);
                             soundManager.playHit(1.2 + Math.random() * 0.3);
-                            if (killed) {
-                                this.score += KILL_SCORE;
+                            if (result.died) {
+                                this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
                                 this.highScore = Math.max(this.highScore, this.score);
                                 this.screenEffects.hitstop(0.06);
                                 this.screenEffects.shake(8, 0.2);
                                 soundManager.playZombieDeath();
 
-                                // Death explosion particles
-                                this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 25, {
+                                // Check for radioactive death - slow player if nearby
+                                if (result.isRadioactive) {
+                                    const zombieCenter = zombie.getCenter();
+                                    const playerCenter = {
+                                        x: this.player.x + this.player.width / 2,
+                                        y: this.player.y + this.player.height / 2
+                                    };
+                                    const dist = Math.sqrt(
+                                        Math.pow(zombieCenter.x - playerCenter.x, 2) +
+                                        Math.pow(zombieCenter.y - playerCenter.y, 2)
+                                    );
+                                    if (dist <= zombie.radioactiveRadius) {
+                                        this.playerSlowedUntil = performance.now() + 5000;
+                                        this.screenEffects.flash('rgba(50, 255, 50, 0.4)', 0.5);
+                                    }
+                                    // Radioactive death particles
+                                    this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 20, {
+                                        angle: Math.PI / 2,
+                                        spread: Math.PI * 2,
+                                        speed: 150,
+                                        colors: ['#50ff50', '#30cc30', '#80ff80'],
+                                        size: 10,
+                                        life: 1.2,
+                                        gravity: 100,
+                                        friction: 0.98
+                                    });
+                                }
+
+                                // Death explosion particles - color based on type
+                                const deathColors = zombie.type === ZOMBIE_TYPE.RADIOACTIVE ?
+                                    ['#50ff50', '#30cc30', '#80ff80', '#ff0000'] :
+                                    zombie.type === ZOMBIE_TYPE.FAST ?
+                                    ['#9ab0c0', '#7090a0', '#c0d0e0', '#ff0000'] :
+                                    zombie.type === ZOMBIE_TYPE.LARGE ?
+                                    ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#ff0000'] :
+                                    ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000', '#ff0000'];
+                                this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 25 * zombie.scale, {
                                     angle: Math.PI,
                                     spread: Math.PI,
                                     speed: 300,
-                                    colors: ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000', '#ff0000'],
-                                    size: 10,
+                                    colors: deathColors,
+                                    size: 10 * zombie.scale,
                                     life: 1,
                                     gravity: 400,
                                     friction: 0.97
