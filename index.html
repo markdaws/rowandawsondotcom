@@ -2079,7 +2079,8 @@
             FAST: 'fast',
             RADIOACTIVE: 'radioactive',
             JUMPING: 'jumping',
-            LARGE: 'large'
+            LARGE: 'large',      // Mini Boss
+            TITAN: 'titan'       // Mega Boss
         };
 
         // ============================================
@@ -2122,6 +2123,12 @@
                         this.health = 200;
                         this.speed = this.baseSpeed / 1.5;
                         break;
+                    case ZOMBIE_TYPE.TITAN:
+                        this.width = 140; // 4x width
+                        this.height = 220; // 4x height
+                        this.health = 500;
+                        this.speed = this.baseSpeed / 2;
+                        break;
                     default: // NORMAL
                         this.width = 35;
                         this.height = 55;
@@ -2143,6 +2150,7 @@
 
                 // Juice effects
                 this.knockback = 0;
+                this.knockbackVelocity = 0; // Actual physics-based knockback
                 this.hitFlash = 0;
                 this.squashX = 1;
                 this.squashY = 1;
@@ -2150,7 +2158,7 @@
                 this.deathVelocityY = 0;
 
                 // Scale factor for drawing
-                this.scale = type === ZOMBIE_TYPE.LARGE ? 3 : 1;
+                this.scale = type === ZOMBIE_TYPE.TITAN ? 4 : type === ZOMBIE_TYPE.LARGE ? 3 : 1;
             }
 
             draw() {
@@ -2215,13 +2223,27 @@
                         eyeGlow = 'rgba(255, 0, 0, 0.5)';
                         break;
                     case ZOMBIE_TYPE.LARGE:
-                        // Large zombie - darker, more menacing
+                        // Large zombie (Mini Boss) - darker, more menacing
                         skinColor = flashMix > 0 ? this.mixColors('#5a6a5a', '#ffffff', flashMix) : '#5a6a5a';
                         skinDark = flashMix > 0 ? this.mixColors('#3a4a3a', '#ffffff', flashMix) : '#3a4a3a';
                         clothColor = flashMix > 0 ? this.mixColors('#3a3a4a', '#ffffff', flashMix) : '#3a3a4a';
                         clothDark = flashMix > 0 ? this.mixColors('#2a2a3a', '#ffffff', flashMix) : '#2a2a3a';
                         eyeColor = '#ff4400';
                         eyeGlow = 'rgba(255, 100, 0, 0.5)';
+                        break;
+                    case ZOMBIE_TYPE.TITAN:
+                        // Titan (Mega Boss) - dark purple/black, glowing eyes
+                        skinColor = flashMix > 0 ? this.mixColors('#4a3a5a', '#ffffff', flashMix) : '#4a3a5a';
+                        skinDark = flashMix > 0 ? this.mixColors('#2a1a3a', '#ffffff', flashMix) : '#2a1a3a';
+                        clothColor = flashMix > 0 ? this.mixColors('#1a1a2a', '#ffffff', flashMix) : '#1a1a2a';
+                        clothDark = flashMix > 0 ? this.mixColors('#0a0a1a', '#ffffff', flashMix) : '#0a0a1a';
+                        eyeColor = '#ff00ff';
+                        eyeGlow = 'rgba(255, 0, 255, 0.7)';
+                        // Draw ominous aura around Titan
+                        ctx.fillStyle = 'rgba(100, 0, 150, 0.2)';
+                        ctx.beginPath();
+                        ctx.arc(drawX + this.width/2, this.y + this.height/2, this.width * 0.8, 0, Math.PI * 2);
+                        ctx.fill();
                         break;
                     default: // NORMAL
                         skinColor = flashMix > 0 ? this.mixColors('#7a9a7a', '#ffffff', flashMix) : '#7a9a7a';
@@ -2371,6 +2393,8 @@
                     healthColor = '#50ff50';
                 } else if (this.type === ZOMBIE_TYPE.FAST) {
                     healthColor = '#50ffff';
+                } else if (this.type === ZOMBIE_TYPE.TITAN) {
+                    healthColor = '#ff00ff';
                 } else {
                     healthColor = healthPercent > 0.5 ? '#4CAF50' : healthPercent > 0.25 ? '#FF9800' : '#f44336';
                 }
@@ -2390,7 +2414,8 @@
                     const label = this.type === ZOMBIE_TYPE.FAST ? 'FAST' :
                                  this.type === ZOMBIE_TYPE.RADIOACTIVE ? 'RAD' :
                                  this.type === ZOMBIE_TYPE.JUMPING ? 'JUMP' :
-                                 this.type === ZOMBIE_TYPE.LARGE ? 'BOSS' : '';
+                                 this.type === ZOMBIE_TYPE.LARGE ? 'MINI BOSS' :
+                                 this.type === ZOMBIE_TYPE.TITAN ? 'TITAN' : '';
                     ctx.fillText(label, this.x + this.width/2, barY - 2);
                 }
             }
@@ -2402,6 +2427,25 @@
                 if (this.hitFlash < 0) this.hitFlash = 0;
                 this.squashX += (1 - this.squashX) * deltaTime * 12;
                 this.squashY += (1 - this.squashY) * deltaTime * 12;
+
+                // Apply knockback physics - actually move the zombie
+                if (Math.abs(this.knockbackVelocity) > 5) {
+                    this.x += this.knockbackVelocity * deltaTime;
+                    // Apply friction (decelerate) - lose ~90% velocity over ~0.3 seconds
+                    const friction = Math.pow(0.001, deltaTime);
+                    this.knockbackVelocity *= friction;
+                    // Keep zombie in bounds
+                    if (this.x > CANVAS_WIDTH - this.width) {
+                        this.x = CANVAS_WIDTH - this.width;
+                        this.knockbackVelocity = 0;
+                    }
+                    // If knocked back from base, no longer at base
+                    if (this.atBase && this.x > base.x + base.width + 10) {
+                        this.atBase = false;
+                    }
+                } else {
+                    this.knockbackVelocity = 0;
+                }
 
                 if (this.dead) {
                     this.fadeOut -= deltaTime * 2;
@@ -2484,6 +2528,8 @@
 
                 // Hit juice - scale knockback for large zombies
                 this.knockback = knockbackAmount / this.scale;
+                // Physics knockback - push zombie back (positive = right)
+                this.knockbackVelocity = (knockbackAmount * 15) / this.scale;
                 this.hitFlash = 1;
                 this.squashX = 1.3;
                 this.squashY = 0.7;
@@ -2629,6 +2675,11 @@
                 // Track score for large zombie spawning (every 100 points)
                 this.lastLargeZombieScore = 0;
 
+                // Titan announcement and tracking
+                this.titanAnnouncement = false;
+                this.titanAnnouncementTime = 0;
+                this.activeTitan = null;
+
                 this.setupInput();
             }
 
@@ -2759,11 +2810,22 @@
                     let hitCount = 0;
                     this.zombies.forEach(zombie => {
                         if (!zombie.dead && this.checkCollision(punchBox, zombie.getHitbox())) {
-                            const result = zombie.takeDamage(PUNCH_DAMAGE, 20);
+                            // 10% chance to knock back on punch
+                            const punchKnockback = Math.random() < 0.10 ? 50 : 0;
+                            const result = zombie.takeDamage(PUNCH_DAMAGE, punchKnockback);
                             soundManager.playHit(0.8 + Math.random() * 0.4);
                             if (result.died) {
-                                this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
+                                const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
+                                                       zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1;
+                                this.score += KILL_SCORE * scoreMultiplier;
                                 this.highScore = Math.max(this.highScore, this.score);
+
+                                // Clear Titan reference if killed
+                                if (zombie.type === ZOMBIE_TYPE.TITAN) {
+                                    this.activeTitan = null;
+                                    this.screenEffects.shake(20, 0.5);
+                                    this.screenEffects.flash('rgba(255, 0, 255, 0.5)', 0.5);
+                                }
                                 this.screenEffects.hitstop(0.05);
                                 this.screenEffects.shake(6, 0.15);
                                 soundManager.playZombieDeath();
@@ -2801,6 +2863,8 @@
                                     ['#50ff50', '#30cc30', '#80ff80', '#8b0000'] :
                                     zombie.type === ZOMBIE_TYPE.FAST ?
                                     ['#9ab0c0', '#7090a0', '#c0d0e0', '#8b0000'] :
+                                    zombie.type === ZOMBIE_TYPE.TITAN ?
+                                    ['#8800ff', '#ff00ff', '#cc00cc', '#4a3a5a'] :
                                     zombie.type === ZOMBIE_TYPE.LARGE ?
                                     ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#8b0000'] :
                                     ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'];
@@ -2984,10 +3048,19 @@
                         soundManager.playHit(0.6 + Math.random() * 0.3);
                         const result = zombie.takeDamage(GROUND_SMASH_DAMAGE, knockbackAmount * knockbackDir);
                         if (result.died) {
-                            this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
+                            const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
+                                                   zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1;
+                            this.score += KILL_SCORE * scoreMultiplier;
                             this.highScore = Math.max(this.highScore, this.score);
                             killCount++;
                             soundManager.playZombieDeath();
+
+                            // Clear Titan reference if killed
+                            if (zombie.type === ZOMBIE_TYPE.TITAN) {
+                                this.activeTitan = null;
+                                this.screenEffects.shake(20, 0.5);
+                                this.screenEffects.flash('rgba(255, 0, 255, 0.5)', 0.5);
+                            }
 
                             // Check for radioactive death - slow player (already in smash radius)
                             if (result.isRadioactive) {
@@ -3011,6 +3084,8 @@
                                 ['#50ff50', '#30cc30', '#80ff80', '#8b0000'] :
                                 zombie.type === ZOMBIE_TYPE.FAST ?
                                 ['#9ab0c0', '#7090a0', '#c0d0e0', '#8b0000'] :
+                                zombie.type === ZOMBIE_TYPE.TITAN ?
+                                ['#8800ff', '#ff00ff', '#cc00cc', '#4a3a5a'] :
                                 zombie.type === ZOMBIE_TYPE.LARGE ?
                                 ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#8b0000'] :
                                 ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000'];
@@ -3067,6 +3142,9 @@
                 this.screenEffects = new ScreenEffects();
                 this.playerSlowedUntil = 0;
                 this.lastLargeZombieScore = 0;
+                this.titanAnnouncement = false;
+                this.titanAnnouncementTime = 0;
+                this.activeTitan = null;
                 soundManager.playBackgroundMusic();
             }
 
@@ -3150,13 +3228,44 @@
                     this.spawnInterval = Math.max(MIN_SPAWN_INTERVAL, this.spawnInterval - SPAWN_ACCELERATION);
                 }
 
-                // Spawn large zombie every 100 points
+                // Boss spawn every 100 points
+                // 89% Mini Boss only, 10% Titan only, 1% both Mini Boss AND Titan
                 if (this.score >= this.lastLargeZombieScore + 100) {
-                    this.zombies.push(new Zombie(ZOMBIE_TYPE.LARGE));
                     this.lastLargeZombieScore = Math.floor(this.score / 100) * 100;
-                    // Visual feedback for boss spawn
-                    this.screenEffects.shake(5, 0.3);
-                    this.screenEffects.flash('rgba(100, 50, 0, 0.3)', 0.5);
+                    const bossRoll = Math.random();
+
+                    if (bossRoll < 0.01) {
+                        // 1% chance: BOTH Mini Boss and Titan spawn together!
+                        this.zombies.push(new Zombie(ZOMBIE_TYPE.LARGE));
+                        this.screenEffects.shake(5, 0.3);
+                        this.screenEffects.flash('rgba(100, 50, 0, 0.3)', 0.5);
+
+                        if (!this.activeTitan) {
+                            const titan = new Zombie(ZOMBIE_TYPE.TITAN);
+                            this.zombies.push(titan);
+                            this.activeTitan = titan;
+                            this.titanAnnouncement = true;
+                            this.titanAnnouncementTime = currentTime;
+                            this.screenEffects.shake(15, 1.0);
+                            this.screenEffects.flash('rgba(100, 0, 150, 0.5)', 1.0);
+                            this.screenEffects.triggerChromatic(5);
+                        }
+                    } else if (bossRoll < 0.11 && !this.activeTitan) {
+                        // 10% chance: Titan instead of Mini Boss
+                        const titan = new Zombie(ZOMBIE_TYPE.TITAN);
+                        this.zombies.push(titan);
+                        this.activeTitan = titan;
+                        this.titanAnnouncement = true;
+                        this.titanAnnouncementTime = currentTime;
+                        this.screenEffects.shake(15, 1.0);
+                        this.screenEffects.flash('rgba(100, 0, 150, 0.5)', 1.0);
+                        this.screenEffects.triggerChromatic(5);
+                    } else {
+                        // 89% chance: Just Mini Boss
+                        this.zombies.push(new Zombie(ZOMBIE_TYPE.LARGE));
+                        this.screenEffects.shake(5, 0.3);
+                        this.screenEffects.flash('rgba(100, 50, 0, 0.3)', 0.5);
+                    }
                 }
 
                 // Update zombies
@@ -3231,14 +3340,24 @@
                     const projHitbox = projectile.getHitbox();
                     for (let zombie of this.zombies) {
                         if (!zombie.dead && this.checkCollision(projHitbox, zombie.getHitbox())) {
-                            const result = zombie.takeDamage(projectile.damage, 30);
+                            // Shooting always knocks back
+                            const result = zombie.takeDamage(projectile.damage, 45);
                             soundManager.playHit(1.2 + Math.random() * 0.3);
                             if (result.died) {
-                                this.score += KILL_SCORE * (zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1);
+                                const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
+                                                       zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1;
+                                this.score += KILL_SCORE * scoreMultiplier;
                                 this.highScore = Math.max(this.highScore, this.score);
                                 this.screenEffects.hitstop(0.06);
                                 this.screenEffects.shake(8, 0.2);
                                 soundManager.playZombieDeath();
+
+                                // Clear Titan reference if killed
+                                if (zombie.type === ZOMBIE_TYPE.TITAN) {
+                                    this.activeTitan = null;
+                                    this.screenEffects.shake(20, 0.5);
+                                    this.screenEffects.flash('rgba(255, 0, 255, 0.5)', 0.5);
+                                }
 
                                 // Check for radioactive death - slow player if nearby
                                 if (result.isRadioactive) {
@@ -3273,6 +3392,8 @@
                                     ['#50ff50', '#30cc30', '#80ff80', '#ff0000'] :
                                     zombie.type === ZOMBIE_TYPE.FAST ?
                                     ['#9ab0c0', '#7090a0', '#c0d0e0', '#ff0000'] :
+                                    zombie.type === ZOMBIE_TYPE.TITAN ?
+                                    ['#8800ff', '#ff00ff', '#cc00cc', '#4a3a5a'] :
                                     zombie.type === ZOMBIE_TYPE.LARGE ?
                                     ['#5a6a5a', '#3a4a3a', '#7a8a7a', '#ff0000'] :
                                     ['#4a6b4a', '#6b8e6b', '#3d5a3d', '#8b0000', '#ff0000'];
@@ -3643,6 +3764,93 @@
                 } else {
                     ctx.fillStyle = '#4CAF50';
                     ctx.fillText('READY', CANVAS_WIDTH / 2 + 40, 40);
+                }
+
+                // Titan Health Bar (at top of screen when active)
+                if (this.activeTitan && !this.activeTitan.dead) {
+                    const titanBarWidth = 300;
+                    const titanBarHeight = 20;
+                    const titanBarX = (CANVAS_WIDTH - titanBarWidth) / 2;
+                    const titanBarY = 55;
+
+                    // Background panel
+                    ctx.fillStyle = 'rgba(50, 0, 80, 0.9)';
+                    ctx.fillRect(titanBarX - 10, titanBarY - 5, titanBarWidth + 20, titanBarHeight + 25);
+
+                    // Pulsing border
+                    const pulse = Math.sin(currentTime / 200) * 0.3 + 0.7;
+                    ctx.strokeStyle = `rgba(255, 0, 255, ${pulse})`;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(titanBarX - 10, titanBarY - 5, titanBarWidth + 20, titanBarHeight + 25);
+
+                    // Label
+                    ctx.fillStyle = '#ff00ff';
+                    ctx.font = 'bold 12px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('THE TITAN', CANVAS_WIDTH / 2, titanBarY + 8);
+
+                    // Health bar background
+                    ctx.fillStyle = '#1a1a2a';
+                    ctx.fillRect(titanBarX, titanBarY + 12, titanBarWidth, titanBarHeight);
+
+                    // Health bar fill (purple gradient effect)
+                    const titanHealthPercent = this.activeTitan.health / this.activeTitan.maxHealth;
+                    const gradient = ctx.createLinearGradient(titanBarX, 0, titanBarX + titanBarWidth * titanHealthPercent, 0);
+                    gradient.addColorStop(0, '#8800ff');
+                    gradient.addColorStop(0.5, '#ff00ff');
+                    gradient.addColorStop(1, '#cc00cc');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(titanBarX, titanBarY + 12, titanBarWidth * titanHealthPercent, titanBarHeight);
+
+                    // Health bar border
+                    ctx.strokeStyle = '#ff00ff';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(titanBarX, titanBarY + 12, titanBarWidth, titanBarHeight);
+
+                    // Health text
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 11px Courier New';
+                    ctx.fillText(`${Math.ceil(this.activeTitan.health)} / ${this.activeTitan.maxHealth}`, CANVAS_WIDTH / 2, titanBarY + 27);
+                }
+
+                // Titan Announcement (shows for 3 seconds when Titan spawns)
+                if (this.titanAnnouncement) {
+                    const announcementDuration = 3000;
+                    const timeSinceAnnouncement = currentTime - this.titanAnnouncementTime;
+
+                    if (timeSinceAnnouncement < announcementDuration) {
+                        const fadeIn = Math.min(1, timeSinceAnnouncement / 300);
+                        const fadeOut = Math.max(0, 1 - (timeSinceAnnouncement - announcementDuration + 500) / 500);
+                        const alpha = Math.min(fadeIn, fadeOut);
+
+                        // Dark overlay behind text
+                        ctx.fillStyle = `rgba(50, 0, 80, ${alpha * 0.7})`;
+                        ctx.fillRect(0, CANVAS_HEIGHT / 2 - 50, CANVAS_WIDTH, 100);
+
+                        // Glowing text effect
+                        ctx.textAlign = 'center';
+                        ctx.font = 'bold 36px Courier New';
+
+                        // Shadow/glow
+                        ctx.shadowColor = '#ff00ff';
+                        ctx.shadowBlur = 20 + Math.sin(currentTime / 100) * 10;
+                        ctx.fillStyle = `rgba(255, 0, 255, ${alpha})`;
+                        ctx.fillText('THE TITAN HAS AWAKENED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+                        // Main text
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                        ctx.fillText('THE TITAN HAS AWAKENED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+                        // Subtitle
+                        ctx.font = '18px Courier New';
+                        ctx.fillStyle = `rgba(200, 100, 255, ${alpha})`;
+                        ctx.fillText('500 HP MEGA BOSS', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
+
+                        ctx.shadowColor = 'transparent';
+                    } else {
+                        this.titanAnnouncement = false;
+                    }
                 }
             }
 
