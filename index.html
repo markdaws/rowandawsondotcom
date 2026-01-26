@@ -1761,6 +1761,10 @@
 
                 // Direction facing (true = right, false = left)
                 this.facingRight = true;
+
+                // Minigun status (set by Game class)
+                this.hasMinigun = false;
+                this.minigunRotation = 0;
             }
 
             draw() {
@@ -1903,9 +1907,49 @@
 
                 // Weapon/Gun silhouette when not punching
                 if (!this.isPunching && !this.isGroundSmashing) {
-                    ctx.fillStyle = '#3a3a3a';
-                    ctx.fillRect(drawX + 32, baseY + 22, p*3, p);
-                    ctx.fillRect(drawX + 36, baseY + 18, p, p*2);
+                    if (this.hasMinigun) {
+                        // Cool Minigun sprite
+                        // Main barrel housing (dark grey)
+                        ctx.fillStyle = '#2a2a2a';
+                        ctx.fillRect(drawX + 28, baseY + 18, p*5, p*2);
+
+                        // Multiple rotating barrels
+                        ctx.fillStyle = '#1a1a1a';
+                        const barrelOffsets = [0, 3, 6];
+                        barrelOffsets.forEach((offset, i) => {
+                            const yOff = Math.sin(this.minigunRotation + i * 2.1) * 1.5;
+                            ctx.fillRect(drawX + 40, baseY + 18 + yOff, p*4, p*0.7);
+                        });
+
+                        // Barrel shroud/heat shield (with holes)
+                        ctx.fillStyle = '#3a3a3a';
+                        ctx.fillRect(drawX + 38, baseY + 16, p*3, p);
+                        ctx.fillRect(drawX + 38, baseY + 24, p*3, p);
+
+                        // Handle/grip
+                        ctx.fillStyle = '#4a3020';
+                        ctx.fillRect(drawX + 30, baseY + 26, p*1.5, p*2);
+
+                        // Ammo belt hint
+                        ctx.fillStyle = '#8B7355';
+                        ctx.fillRect(drawX + 26, baseY + 20, p, p*2);
+                        ctx.fillStyle = '#ffd700';
+                        ctx.fillRect(drawX + 26, baseY + 20, p*0.5, p*0.5);
+                        ctx.fillRect(drawX + 26, baseY + 23, p*0.5, p*0.5);
+
+                        // Muzzle flash when firing
+                        if (this.muzzleFlash > 0) {
+                            ctx.fillStyle = `rgba(255, 200, 50, ${this.muzzleFlash})`;
+                            ctx.fillRect(drawX + 52, baseY + 17, p*2, p*2);
+                            ctx.fillStyle = `rgba(255, 100, 0, ${this.muzzleFlash * 0.5})`;
+                            ctx.fillRect(drawX + 54, baseY + 16, p*2, p*3);
+                        }
+                    } else {
+                        // Regular pistol
+                        ctx.fillStyle = '#3a3a3a';
+                        ctx.fillRect(drawX + 32, baseY + 22, p*3, p);
+                        ctx.fillRect(drawX + 36, baseY + 18, p, p*2);
+                    }
                 }
 
                 ctx.restore();
@@ -2362,6 +2406,59 @@
                 ctx.fillRect(drawX + armExtend - 6*s + attackOffset, baseY + 28*s, p, p);
 
                 ctx.restore(); // Restore from squash/knockback transform
+
+                // DAMAGE DEGRADATION - visual wounds based on health
+                const healthPercent = this.health / this.maxHealth;
+                const damageDrawX = this.x + this.knockback;
+
+                if (healthPercent < 1 && !this.dead) {
+                    // Blood drips (more as health decreases)
+                    ctx.fillStyle = '#8b0000';
+
+                    if (healthPercent < 0.9) {
+                        // Minor scratches
+                        ctx.fillRect(damageDrawX + 12*s, this.y + 8*s, p*0.5, p*2);
+                    }
+
+                    if (healthPercent < 0.7) {
+                        // Wound on body
+                        ctx.fillStyle = '#660000';
+                        ctx.fillRect(damageDrawX + 16*s, this.y + 24*s, p*2, p*2);
+                        ctx.fillStyle = '#8b0000';
+                        ctx.fillRect(damageDrawX + 16*s, this.y + 28*s, p, p*3);
+                        // Chunk missing from head
+                        ctx.fillStyle = '#4a0000';
+                        ctx.fillRect(damageDrawX + 22*s, this.y + 4*s, p*1.5, p*2);
+                    }
+
+                    if (healthPercent < 0.5) {
+                        // More severe damage - exposed bone/ribs
+                        ctx.fillStyle = '#ddccbb';
+                        ctx.fillRect(damageDrawX + 8*s, this.y + 26*s, p, p*2);
+                        ctx.fillRect(damageDrawX + 10*s, this.y + 28*s, p, p*1.5);
+                        // Bigger wound
+                        ctx.fillStyle = '#550000';
+                        ctx.fillRect(damageDrawX + 18*s, this.y + 22*s, p*3, p*3);
+                        // Blood splatter
+                        ctx.fillStyle = '#8b0000';
+                        ctx.fillRect(damageDrawX + 6*s, this.y + 32*s, p, p*2);
+                        ctx.fillRect(damageDrawX + 24*s, this.y + 30*s, p, p*3);
+                    }
+
+                    if (healthPercent < 0.3) {
+                        // Critical damage - missing limb appearance
+                        ctx.fillStyle = '#330000';
+                        ctx.fillRect(damageDrawX + 4*s, this.y + 20*s, p*2, p*4);
+                        // Skull showing through
+                        ctx.fillStyle = '#ccbbaa';
+                        ctx.fillRect(damageDrawX + 10*s, this.y + 2*s, p*2, p*2);
+                        // More blood
+                        ctx.fillStyle = '#8b0000';
+                        ctx.fillRect(damageDrawX + 14*s, this.y + 40*s, p*0.5, p*4);
+                        ctx.fillRect(damageDrawX + 20*s, this.y + 36*s, p*0.5, p*5);
+                    }
+                }
+
                 ctx.globalAlpha = 1;
 
                 // Health bar (only if alive and damaged)
@@ -2656,6 +2753,81 @@
         }
 
         // ============================================
+        // SHELL CASING CLASS
+        // ============================================
+        class ShellCasing {
+            constructor(x, y, direction, isMinigun = false) {
+                this.x = x;
+                this.y = y;
+                this.width = isMinigun ? 3 : 4;
+                this.height = isMinigun ? 2 : 3;
+                // Eject backwards and upward
+                this.velocityX = -direction * (80 + Math.random() * 60);
+                this.velocityY = -(100 + Math.random() * 80);
+                this.rotation = 0;
+                this.rotationSpeed = (Math.random() - 0.5) * 20;
+                this.groundY = CANVAS_HEIGHT - 5 - Math.random() * 10;
+                this.isMinigun = isMinigun;
+                this.onGround = false;
+                this.fadeTimer = 0;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+
+                // Brass shell casing
+                ctx.fillStyle = '#daa520';
+                ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+
+                // Highlight
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(-this.width/2, -this.height/2, this.width * 0.3, this.height * 0.5);
+
+                // Dark end
+                ctx.fillStyle = '#b8860b';
+                ctx.fillRect(this.width/2 - 1, -this.height/2, 1, this.height);
+
+                ctx.restore();
+            }
+
+            update(deltaTime) {
+                if (!this.onGround) {
+                    // Apply gravity
+                    this.velocityY += 600 * deltaTime;
+                    this.x += this.velocityX * deltaTime;
+                    this.y += this.velocityY * deltaTime;
+                    this.rotation += this.rotationSpeed * deltaTime;
+
+                    // Air friction
+                    this.velocityX *= 0.99;
+
+                    // Hit ground
+                    if (this.y >= this.groundY) {
+                        this.y = this.groundY;
+                        this.onGround = true;
+                        // Small bounce
+                        if (Math.abs(this.velocityY) > 50) {
+                            this.velocityY = -this.velocityY * 0.3;
+                            this.onGround = false;
+                        } else {
+                            this.velocityY = 0;
+                            this.rotationSpeed = 0;
+                        }
+                    }
+                } else {
+                    // Fade out on ground
+                    this.fadeTimer += deltaTime;
+                    if (this.fadeTimer > 2) {
+                        return true; // Remove
+                    }
+                }
+                return false;
+            }
+        }
+
+        // ============================================
         // GAME CLASS
         // ============================================
         class Game {
@@ -2665,6 +2837,7 @@
                 this.base = new Base();
                 this.zombies = [];
                 this.projectiles = [];
+                this.shellCasings = [];
                 this.score = 0;
                 this.highScore = 0;
                 this.spawnInterval = INITIAL_SPAWN_INTERVAL;
@@ -2956,6 +3129,7 @@
                 // Check for minigun unlock: 10 consecutive jumps then shoot
                 if (!this.hasMinigun && this.consecutiveJumps >= 10) {
                     this.hasMinigun = true;
+                    this.player.hasMinigun = true; // Sync with player for sprite
                     this.minigunUnlockAnnouncement = true;
                     this.minigunAnnouncementTime = currentTime;
                     this.consecutiveJumps = 0;
@@ -2968,6 +3142,9 @@
                 if (this.hasMinigun) {
                     if (this.player.shootMinigun(currentTime)) {
                         soundManager.playShoot();
+
+                        // Spin the minigun barrels
+                        this.player.minigunRotation += 0.8;
 
                         // Smaller recoil for minigun
                         this.player.applyRecoil(2);
@@ -2988,19 +3165,13 @@
                             friction: 0.95
                         });
 
-                        // Shell casing particle
-                        this.particles.emit(this.player.x + this.player.width - 5, this.player.y + 25, 1, {
-                            angle: -Math.PI / 4,
-                            spread: 0.5,
-                            speed: 100,
-                            colors: ['#ffd700'],
-                            size: 3,
-                            life: 0.4,
-                            gravity: 600,
-                            friction: 0.99
-                        });
-
+                        // Shell casing - eject from gun
                         const direction = this.player.facingRight ? 1 : -1;
+                        const shellX = this.player.facingRight ?
+                            this.player.x + this.player.width - 5 :
+                            this.player.x + 5;
+                        this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, true));
+
                         const bulletX = this.player.facingRight ?
                             this.player.x + this.player.width :
                             this.player.x;
@@ -3033,19 +3204,13 @@
                             friction: 0.95
                         });
 
-                        // Shell casing particle
-                        this.particles.emit(this.player.x + this.player.width - 5, this.player.y + 25, 1, {
-                            angle: -Math.PI / 4,
-                            spread: 0.3,
-                            speed: 150,
-                            colors: ['#ffd700'],
-                            size: 4,
-                            life: 0.6,
-                            gravity: 600,
-                            friction: 0.99
-                        });
-
+                        // Shell casing - eject from gun
                         const direction = this.player.facingRight ? 1 : -1;
+                        const shellX = this.player.facingRight ?
+                            this.player.x + this.player.width - 5 :
+                            this.player.x + 5;
+                        this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, false));
+
                         const bulletX = this.player.facingRight ?
                             this.player.x + this.player.width :
                             this.player.x;
@@ -3234,6 +3399,7 @@
                 this.base = new Base();
                 this.zombies = [];
                 this.projectiles = [];
+                this.shellCasings = [];
                 this.score = 0;
                 this.spawnInterval = INITIAL_SPAWN_INTERVAL;
                 this.lastSpawnTime = performance.now();
@@ -3555,6 +3721,9 @@
                     return true;
                 });
 
+                // Update shell casings
+                this.shellCasings = this.shellCasings.filter(shell => !shell.update(deltaTime));
+
                 // Update particles
                 this.particles.update(deltaTime);
 
@@ -3775,6 +3944,9 @@
 
                 // Draw projectiles
                 this.projectiles.forEach(proj => proj.draw());
+
+                // Draw shell casings
+                this.shellCasings.forEach(shell => shell.draw());
 
                 // Draw hit effects
                 this.hitEffects.forEach(effect => {
