@@ -315,7 +315,7 @@
         const GROUND_SMASH_COOLDOWN = 2000;
         const PUNCH_DAMAGE = 10;
         const SHOOT_DAMAGE = 100;
-        const MINIGUN_DAMAGE = 10;
+        const MINIGUN_DAMAGE = 1;
         const GROUND_SMASH_DAMAGE = 50;
         const GROUND_SMASH_RADIUS = 120;
         const ZOMBIE_HEALTH = 100;
@@ -1194,312 +1194,352 @@
             playBackgroundMusic() {
                 if (!this.initialized) return;
                 this.stopMusic();
-                const ctx = this.audioContext;
+                const actx = this.audioContext;
 
                 this.currentMusic = { oscillators: [], intervals: [] };
 
-                // ========== EPIC BASS (64 notes = ~13 seconds per loop) ==========
-                const bassNotes = [
-                    // Section A - Dark and brooding
-                    55, 55, 55, 55, 73, 73, 55, 55,
-                    82, 82, 73, 73, 55, 55, 49, 49,
-                    // Section B - Rising tension
-                    55, 62, 73, 82, 98, 98, 82, 73,
-                    62, 55, 49, 55, 62, 73, 82, 98,
-                    // Section C - Epic climax
-                    110, 110, 98, 98, 82, 82, 73, 73,
-                    98, 110, 98, 82, 73, 62, 55, 49,
-                    // Section D - Resolution and rebuild
-                    55, 49, 55, 62, 73, 82, 73, 62,
-                    55, 55, 73, 82, 98, 82, 73, 55
+                // Master tempo - 140 BPM for high energy
+                const BPM = 140;
+                const beatMs = 60000 / BPM;
+                const eighthMs = beatMs / 2;
+                const sixteenthMs = beatMs / 4;
+
+                // Global song position for variation (128 beats = ~55 seconds before full repeat)
+                let globalBeat = 0;
+                let section = 0; // 0-7, changes every 16 beats
+
+                // ========== PUNCHY KICK DRUM ==========
+                const playKick = () => {
+                    const kick = actx.createOscillator();
+                    const kickGain = actx.createGain();
+                    const kickClick = actx.createOscillator();
+                    const clickGain = actx.createGain();
+
+                    // Sub bass thump
+                    kick.type = 'sine';
+                    kick.frequency.setValueAtTime(180, actx.currentTime);
+                    kick.frequency.exponentialRampToValueAtTime(35, actx.currentTime + 0.08);
+                    kickGain.gain.setValueAtTime(0.8, actx.currentTime);
+                    kickGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.2);
+                    kick.connect(kickGain);
+                    kickGain.connect(this.musicGain);
+                    kick.start();
+                    kick.stop(actx.currentTime + 0.21);
+
+                    // Attack click
+                    kickClick.type = 'triangle';
+                    kickClick.frequency.value = 800;
+                    clickGain.gain.setValueAtTime(0.3, actx.currentTime);
+                    clickGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.02);
+                    kickClick.connect(clickGain);
+                    clickGain.connect(this.musicGain);
+                    kickClick.start();
+                    kickClick.stop(actx.currentTime + 0.03);
+                };
+
+                // ========== CRISPY SNARE ==========
+                const playSnare = () => {
+                    const snare = actx.createOscillator();
+                    const snareGain = actx.createGain();
+                    snare.type = 'triangle';
+                    snare.frequency.setValueAtTime(280, actx.currentTime);
+                    snare.frequency.exponentialRampToValueAtTime(120, actx.currentTime + 0.08);
+                    snareGain.gain.setValueAtTime(0.4, actx.currentTime);
+                    snareGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.12);
+                    snare.connect(snareGain);
+                    snareGain.connect(this.musicGain);
+                    snare.start();
+                    snare.stop(actx.currentTime + 0.13);
+
+                    // Noise burst
+                    const noise = actx.createBufferSource();
+                    noise.buffer = this.createNoise(0.12, 2);
+                    const noiseGain = actx.createGain();
+                    const filter = actx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 3000;
+                    filter.Q.value = 1;
+                    noiseGain.gain.setValueAtTime(0.5, actx.currentTime);
+                    noiseGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.12);
+                    noise.connect(filter);
+                    filter.connect(noiseGain);
+                    noiseGain.connect(this.musicGain);
+                    noise.start();
+                };
+
+                // ========== HI-HAT PATTERNS ==========
+                const playHihat = (open = false) => {
+                    const hihat = actx.createBufferSource();
+                    hihat.buffer = this.createNoise(open ? 0.15 : 0.04, 3);
+                    const hihatGain = actx.createGain();
+                    const hihatFilter = actx.createBiquadFilter();
+                    hihatFilter.type = 'highpass';
+                    hihatFilter.frequency.value = open ? 6000 : 9000;
+                    hihatGain.gain.setValueAtTime(open ? 0.25 : 0.18, actx.currentTime);
+                    hihatGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + (open ? 0.15 : 0.04));
+                    hihat.connect(hihatFilter);
+                    hihatFilter.connect(hihatGain);
+                    hihatGain.connect(this.musicGain);
+                    hihat.start();
+                };
+
+                // ========== DRUM MACHINE ==========
+                let drumBeat = 0;
+                const drumPatterns = [
+                    // Pattern 0: Basic four-on-floor
+                    { kick: [0,4,8,12], snare: [4,12], hihat: [0,2,4,6,8,10,12,14], openHat: [6,14] },
+                    // Pattern 1: Syncopated
+                    { kick: [0,3,6,10,12], snare: [4,12], hihat: [0,2,4,6,8,10,12,14], openHat: [2,10] },
+                    // Pattern 2: Driving
+                    { kick: [0,2,4,6,8,10,12,14], snare: [4,12], hihat: [1,3,5,7,9,11,13,15], openHat: [] },
+                    // Pattern 3: Half-time feel
+                    { kick: [0,8], snare: [8], hihat: [0,4,8,12], openHat: [4,12] },
+                    // Pattern 4: Buildup
+                    { kick: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], snare: [], hihat: [0,2,4,6,8,10,12,14], openHat: [] },
+                    // Pattern 5: Breakdown
+                    { kick: [0,12], snare: [8], hihat: [0,8], openHat: [4,12] },
+                    // Pattern 6: Double-time
+                    { kick: [0,4,8,12], snare: [2,6,10,14], hihat: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], openHat: [] },
+                    // Pattern 7: Groove
+                    { kick: [0,5,8,13], snare: [4,12], hihat: [0,2,4,6,8,10,12,14], openHat: [3,11] }
+                ];
+
+                const playDrums = () => {
+                    if (!this.currentMusic) return;
+                    const beat16 = drumBeat % 16;
+                    const patternIdx = section % drumPatterns.length;
+                    const pattern = drumPatterns[patternIdx];
+
+                    if (pattern.kick.includes(beat16)) playKick();
+                    if (pattern.snare.includes(beat16)) playSnare();
+                    if (pattern.openHat.includes(beat16)) playHihat(true);
+                    else if (pattern.hihat.includes(beat16)) playHihat(false);
+
+                    drumBeat++;
+                    if (drumBeat % 16 === 0) {
+                        section = Math.floor(globalBeat / 16) % 8;
+                    }
+                };
+                const drumInt = setInterval(playDrums, sixteenthMs);
+                this.currentMusic.intervals.push(drumInt);
+
+                // ========== PUNCHY SYNTH BASS ==========
+                const bassLines = [
+                    [55, 0, 55, 0, 73, 0, 55, 82, 55, 0, 73, 55, 82, 0, 73, 55],
+                    [55, 55, 0, 55, 73, 0, 82, 0, 55, 73, 0, 82, 98, 82, 73, 55],
+                    [82, 0, 82, 73, 55, 0, 55, 73, 82, 98, 82, 73, 55, 0, 73, 82],
+                    [110, 0, 98, 0, 82, 0, 73, 0, 82, 0, 98, 0, 110, 98, 82, 73]
                 ];
                 let bassIndex = 0;
                 const playBass = () => {
                     if (!this.currentMusic) return;
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'sawtooth';
-                    osc.frequency.value = bassNotes[bassIndex];
-                    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
-                    osc.connect(gain);
-                    gain.connect(this.musicGain);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.19);
-                    bassIndex = (bassIndex + 1) % bassNotes.length;
+                    const lineIdx = Math.floor(globalBeat / 16) % bassLines.length;
+                    const note = bassLines[lineIdx][bassIndex % 16];
+                    if (note > 0) {
+                        const osc = actx.createOscillator();
+                        const osc2 = actx.createOscillator();
+                        const gain = actx.createGain();
+                        const filter = actx.createBiquadFilter();
+
+                        osc.type = 'sawtooth';
+                        osc2.type = 'square';
+                        osc.frequency.value = note;
+                        osc2.frequency.value = note * 1.005; // Slight detune
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(800, actx.currentTime);
+                        filter.frequency.exponentialRampToValueAtTime(200, actx.currentTime + 0.15);
+                        gain.gain.setValueAtTime(0.35, actx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.14);
+
+                        osc.connect(filter);
+                        osc2.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(this.musicGain);
+                        osc.start(); osc2.start();
+                        osc.stop(actx.currentTime + 0.15);
+                        osc2.stop(actx.currentTime + 0.15);
+                    }
+                    bassIndex++;
                 };
-                const bassInt = setInterval(playBass, 200);
+                const bassInt = setInterval(playBass, eighthMs);
                 this.currentMusic.intervals.push(bassInt);
 
-                // ========== VARIED DRUMS (32 beat pattern = ~4.8 seconds, varies by section) ==========
-                let drumBeat = 0;
-                let drumSection = 0;
-                const playDrums = () => {
-                    if (!this.currentMusic) return;
-                    const beatInSection = drumBeat % 32;
-
-                    // Change drum pattern every 32 beats
-                    if (beatInSection === 0) {
-                        drumSection = (drumSection + 1) % 4;
-                    }
-
-                    // Kick patterns vary by section
-                    let playKick = false;
-                    if (drumSection === 0) {
-                        playKick = beatInSection % 4 === 0;
-                    } else if (drumSection === 1) {
-                        playKick = beatInSection % 4 === 0 || beatInSection % 8 === 3;
-                    } else if (drumSection === 2) {
-                        playKick = beatInSection % 2 === 0;
-                    } else {
-                        playKick = beatInSection % 4 === 0 || beatInSection % 4 === 2;
-                    }
-
-                    if (playKick) {
-                        const kick = ctx.createOscillator();
-                        const kickGain = ctx.createGain();
-                        kick.type = 'sine';
-                        kick.frequency.setValueAtTime(150, ctx.currentTime);
-                        kick.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
-                        kickGain.gain.setValueAtTime(0.6, ctx.currentTime);
-                        kickGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-                        kick.connect(kickGain);
-                        kickGain.connect(this.musicGain);
-                        kick.start();
-                        kick.stop(ctx.currentTime + 0.16);
-                    }
-
-                    // Snare patterns vary
-                    let playSnare = false;
-                    if (drumSection === 0 || drumSection === 3) {
-                        playSnare = beatInSection % 4 === 2;
-                    } else if (drumSection === 1) {
-                        playSnare = beatInSection % 4 === 2 || beatInSection % 8 === 7;
-                    } else {
-                        playSnare = beatInSection % 4 === 1 || beatInSection % 4 === 3;
-                    }
-
-                    if (playSnare) {
-                        const snare = ctx.createOscillator();
-                        const snareGain = ctx.createGain();
-                        snare.type = 'triangle';
-                        snare.frequency.setValueAtTime(200, ctx.currentTime);
-                        snare.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
-                        snareGain.gain.setValueAtTime(0.35, ctx.currentTime);
-                        snareGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-                        snare.connect(snareGain);
-                        snareGain.connect(this.musicGain);
-                        snare.start();
-                        snare.stop(ctx.currentTime + 0.11);
-
-                        const noise = ctx.createBufferSource();
-                        noise.buffer = this.createNoise(0.1, 2);
-                        const noiseGain = ctx.createGain();
-                        const filter = ctx.createBiquadFilter();
-                        filter.type = 'highpass';
-                        filter.frequency.value = 1000;
-                        noiseGain.gain.value = 0.3;
-                        noise.connect(filter);
-                        filter.connect(noiseGain);
-                        noiseGain.connect(this.musicGain);
-                        noise.start();
-                    }
-
-                    // Hi-hat varies
-                    const hihatVol = (drumSection === 2) ? 0.15 : 0.22;
-                    if (drumSection !== 2 || beatInSection % 2 === 0) {
-                        const hihat = ctx.createBufferSource();
-                        hihat.buffer = this.createNoise(0.03, 3);
-                        const hihatGain = ctx.createGain();
-                        const hihatFilter = ctx.createBiquadFilter();
-                        hihatFilter.type = 'highpass';
-                        hihatFilter.frequency.value = 8000;
-                        hihatGain.gain.value = hihatVol;
-                        hihat.connect(hihatFilter);
-                        hihatFilter.connect(hihatGain);
-                        hihatGain.connect(this.musicGain);
-                        hihat.start();
-                    }
-
-                    drumBeat++;
-                };
-                const drumInt = setInterval(playDrums, 150);
-                this.currentMusic.intervals.push(drumInt);
-
-                // ========== EPIC MELODY (96 notes = ~29 seconds, multiple themes) ==========
-                const melodyNotes = [
-                    // Theme A - Heroic
-                    330, 392, 440, 392, 330, 294, 330, 392,
-                    440, 494, 523, 494, 440, 392, 330, 294,
-                    // Theme A variation
-                    330, 349, 392, 440, 494, 440, 392, 349,
-                    330, 294, 262, 294, 330, 392, 440, 392,
-                    // Theme B - Mysterious
-                    262, 294, 330, 262, 294, 349, 330, 294,
-                    262, 247, 220, 247, 262, 294, 330, 349,
-                    // Theme B variation
-                    392, 349, 330, 294, 262, 294, 330, 349,
-                    392, 440, 494, 440, 392, 349, 330, 294,
-                    // Theme C - Triumphant
-                    523, 494, 440, 392, 440, 494, 523, 587,
-                    659, 587, 523, 494, 440, 392, 349, 330,
-                    // Resolution
-                    294, 330, 392, 440, 392, 330, 294, 262,
-                    294, 330, 349, 392, 440, 494, 523, 494
+                // ========== ELECTRIC PIANO (Rhodes-style) ==========
+                const pianoChords = [
+                    [[220, 277, 330, 440], [196, 247, 294, 392], [165, 208, 247, 330], [185, 233, 277, 370]],
+                    [[220, 277, 349, 440], [247, 311, 370, 494], [262, 330, 392, 523], [233, 294, 349, 466]],
+                    [[330, 415, 494, 659], [294, 370, 440, 587], [262, 330, 392, 523], [247, 311, 370, 494]],
+                    [[220, 277, 330, 440], [220, 262, 330, 392], [196, 247, 294, 392], [185, 233, 277, 370]]
                 ];
-                let melodyIndex = 0;
-                let melodyRest = 0;
-                const playMelody = () => {
+                let pianoChordIdx = 0;
+                const playPiano = () => {
                     if (!this.currentMusic) return;
+                    const progIdx = Math.floor(globalBeat / 32) % pianoChords.length;
+                    const chord = pianoChords[progIdx][pianoChordIdx % 4];
 
-                    // Occasional rests for breathing room
-                    if (melodyRest > 0) {
-                        melodyRest--;
-                        return;
-                    }
-                    if (Math.random() < 0.1) {
-                        melodyRest = 1;
-                        return;
-                    }
-
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'square';
-                    osc.frequency.value = melodyNotes[melodyIndex];
-                    gain.gain.setValueAtTime(0, ctx.currentTime);
-                    gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-                    gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.2);
-                    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.35);
-                    osc.connect(gain);
-                    gain.connect(this.musicGain);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.36);
-                    melodyIndex = (melodyIndex + 1) % melodyNotes.length;
-                };
-                const melodyInt = setInterval(playMelody, 300);
-                this.currentMusic.intervals.push(melodyInt);
-
-                // ========== CHORD PROGRESSIONS (16 chords = ~19 seconds) ==========
-                let chordBeat = 0;
-                const chordProgressions = [
-                    // Section 1 - Minor feel
-                    [110, 165, 220], [98, 147, 196], [82, 123, 165], [92, 138, 185],
-                    // Section 2 - Building
-                    [110, 165, 220], [123, 185, 247], [147, 220, 294], [165, 247, 330],
-                    // Section 3 - Peak
-                    [147, 220, 294], [165, 247, 330], [185, 277, 370], [165, 247, 330],
-                    // Section 4 - Resolution
-                    [147, 220, 294], [123, 185, 247], [110, 165, 220], [98, 147, 196]
-                ];
-                const playChords = () => {
-                    if (!this.currentMusic) return;
-                    const chord = chordProgressions[chordBeat % chordProgressions.length];
                     chord.forEach((freq, i) => {
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.type = 'sawtooth';
-                        osc.frequency.value = freq;
-                        const vol = 0.2 - i * 0.03;
-                        gain.gain.setValueAtTime(vol, ctx.currentTime);
-                        gain.gain.linearRampToValueAtTime(vol * 0.8, ctx.currentTime + 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-                        osc.connect(gain);
-                        gain.connect(this.musicGain);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 0.61);
-                    });
-                    chordBeat++;
-                };
-                const chordInt = setInterval(playChords, 1200);
-                this.currentMusic.intervals.push(chordInt);
-                playChords();
+                        // Electric piano = sine + harmonics with bell-like decay
+                        const fundamental = actx.createOscillator();
+                        const harmonic = actx.createOscillator();
+                        const gain = actx.createGain();
 
-                // ========== AMBIENT PADS (8 different pads = ~64 seconds total) ==========
-                let padIndex = 0;
-                const padNotes = [
-                    [220, 330, 440], [196, 294, 392], [185, 277, 370], [165, 247, 330],
-                    [220, 349, 440], [196, 311, 392], [175, 262, 349], [165, 262, 330]
+                        fundamental.type = 'sine';
+                        fundamental.frequency.value = freq;
+                        harmonic.type = 'sine';
+                        harmonic.frequency.value = freq * 2;
+
+                        const vol = 0.12 - i * 0.02;
+                        gain.gain.setValueAtTime(vol, actx.currentTime);
+                        gain.gain.setValueAtTime(vol * 0.7, actx.currentTime + 0.05);
+                        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.8);
+
+                        fundamental.connect(gain);
+                        harmonic.connect(gain);
+                        gain.connect(this.musicGain);
+                        fundamental.start(); harmonic.start();
+                        fundamental.stop(actx.currentTime + 0.81);
+                        harmonic.stop(actx.currentTime + 0.81);
+                    });
+                    pianoChordIdx++;
+                };
+                const pianoInt = setInterval(playPiano, beatMs * 2);
+                this.currentMusic.intervals.push(pianoInt);
+                setTimeout(playPiano, 100);
+
+                // ========== DISTORTED GUITAR RIFFS ==========
+                const guitarRiffs = [
+                    [330, 0, 392, 330, 294, 0, 330, 392, 440, 392, 330, 0, 294, 262, 294, 330],
+                    [440, 494, 523, 0, 494, 440, 392, 0, 440, 0, 392, 330, 294, 330, 392, 440],
+                    [523, 0, 494, 440, 523, 587, 523, 494, 440, 0, 392, 0, 440, 494, 523, 0],
+                    [659, 587, 523, 494, 440, 392, 440, 494, 523, 587, 659, 0, 587, 523, 494, 440]
                 ];
-                const playPad = () => {
+                let guitarIdx = 0;
+                const playGuitar = () => {
                     if (!this.currentMusic) return;
-                    const notes = padNotes[padIndex % padNotes.length];
-                    notes.forEach(freq => {
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.value = freq;
-                        gain.gain.setValueAtTime(0, ctx.currentTime);
-                        gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 1);
-                        gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 6);
-                        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 8);
-                        osc.connect(gain);
-                        gain.connect(this.musicGain);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 8.1);
-                    });
-                    padIndex++;
-                };
-                const padInt = setInterval(playPad, 8000);
-                this.currentMusic.intervals.push(padInt);
-                playPad();
+                    const riffIdx = Math.floor(globalBeat / 16) % guitarRiffs.length;
+                    const note = guitarRiffs[riffIdx][guitarIdx % 16];
+                    if (note > 0) {
+                        // Distorted guitar = multiple sawtooths with waveshaping
+                        const osc1 = actx.createOscillator();
+                        const osc2 = actx.createOscillator();
+                        const osc3 = actx.createOscillator();
+                        const gain = actx.createGain();
+                        const distortion = actx.createWaveShaper();
 
-                // ========== ARPEGGIOS (plays occasionally for variety) ==========
-                let arpSection = 0;
-                const arpPatterns = [
-                    [262, 330, 392, 523, 392, 330],
-                    [294, 349, 440, 587, 440, 349],
-                    [330, 392, 494, 659, 494, 392],
-                    [247, 311, 370, 494, 370, 311]
+                        // Create distortion curve
+                        const curve = new Float32Array(256);
+                        for (let i = 0; i < 256; i++) {
+                            const x = (i - 128) / 128;
+                            curve[i] = Math.tanh(x * 3);
+                        }
+                        distortion.curve = curve;
+
+                        osc1.type = 'sawtooth';
+                        osc2.type = 'sawtooth';
+                        osc3.type = 'square';
+                        osc1.frequency.value = note;
+                        osc2.frequency.value = note * 1.01;
+                        osc3.frequency.value = note * 0.5;
+
+                        const preGain = actx.createGain();
+                        preGain.gain.value = 0.4;
+                        gain.gain.setValueAtTime(0.15, actx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.2);
+
+                        osc1.connect(preGain);
+                        osc2.connect(preGain);
+                        osc3.connect(preGain);
+                        preGain.connect(distortion);
+                        distortion.connect(gain);
+                        gain.connect(this.musicGain);
+
+                        osc1.start(); osc2.start(); osc3.start();
+                        osc1.stop(actx.currentTime + 0.21);
+                        osc2.stop(actx.currentTime + 0.21);
+                        osc3.stop(actx.currentTime + 0.21);
+                    }
+                    guitarIdx++;
+                };
+                const guitarInt = setInterval(playGuitar, sixteenthMs);
+                this.currentMusic.intervals.push(guitarInt);
+
+                // ========== SYNTH LEAD (plays every other section) ==========
+                const leadMelodies = [
+                    [523, 587, 659, 587, 523, 494, 440, 494, 523, 0, 587, 659, 698, 659, 587, 523],
+                    [659, 0, 587, 523, 587, 659, 698, 784, 880, 784, 698, 659, 587, 523, 494, 523],
+                    [440, 523, 587, 659, 587, 523, 494, 440, 392, 440, 494, 523, 587, 659, 698, 784],
+                    [880, 0, 784, 698, 659, 587, 523, 494, 523, 587, 659, 698, 784, 880, 784, 698]
                 ];
-                const playArpeggio = () => {
+                let leadIdx = 0;
+                const playLead = () => {
                     if (!this.currentMusic) return;
-                    if (Math.random() > 0.5) return; // 50% chance to play
+                    // Only play on even sections
+                    if (section % 2 !== 0) { leadIdx++; return; }
 
-                    const pattern = arpPatterns[arpSection % arpPatterns.length];
-                    pattern.forEach((freq, i) => {
-                        setTimeout(() => {
-                            if (!this.currentMusic) return;
-                            const osc = ctx.createOscillator();
-                            const gain = ctx.createGain();
-                            osc.type = 'sine';
-                            osc.frequency.value = freq;
-                            gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-                            osc.connect(gain);
-                            gain.connect(this.musicGain);
-                            osc.start();
-                            osc.stop(ctx.currentTime + 0.21);
-                        }, i * 80);
-                    });
-                    arpSection++;
-                };
-                const arpInt = setInterval(playArpeggio, 2400);
-                this.currentMusic.intervals.push(arpInt);
+                    const melodyIdx = Math.floor(globalBeat / 16) % leadMelodies.length;
+                    const note = leadMelodies[melodyIdx][leadIdx % 16];
+                    if (note > 0) {
+                        const osc = actx.createOscillator();
+                        const osc2 = actx.createOscillator();
+                        const gain = actx.createGain();
+                        const filter = actx.createBiquadFilter();
 
-                // ========== EPIC HITS (occasional dramatic accents) ==========
-                let hitCounter = 0;
-                const playHit = () => {
-                    if (!this.currentMusic) return;
-                    hitCounter++;
-                    // Only play on certain intervals for variety
-                    if (hitCounter % 8 !== 0) return;
-
-                    const notes = [110, 220, 330, 440];
-                    notes.forEach(freq => {
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
                         osc.type = 'sawtooth';
-                        osc.frequency.value = freq;
-                        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                        osc.connect(gain);
+                        osc2.type = 'square';
+                        osc.frequency.value = note;
+                        osc2.frequency.value = note * 2.01;
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(3000, actx.currentTime);
+                        filter.frequency.exponentialRampToValueAtTime(800, actx.currentTime + 0.3);
+
+                        gain.gain.setValueAtTime(0, actx.currentTime);
+                        gain.gain.linearRampToValueAtTime(0.18, actx.currentTime + 0.02);
+                        gain.gain.linearRampToValueAtTime(0.12, actx.currentTime + 0.15);
+                        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.35);
+
+                        osc.connect(filter);
+                        osc2.connect(filter);
+                        filter.connect(gain);
                         gain.connect(this.musicGain);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 0.31);
-                    });
+                        osc.start(); osc2.start();
+                        osc.stop(actx.currentTime + 0.36);
+                        osc2.stop(actx.currentTime + 0.36);
+                    }
+                    leadIdx++;
                 };
-                const hitInt = setInterval(playHit, 1200);
-                this.currentMusic.intervals.push(hitInt);
+                const leadInt = setInterval(playLead, eighthMs);
+                this.currentMusic.intervals.push(leadInt);
+
+                // ========== CRASH CYMBAL (on section changes) ==========
+                let lastSection = -1;
+                const playCrash = () => {
+                    if (!this.currentMusic) return;
+                    if (section !== lastSection && (section === 0 || section === 4)) {
+                        lastSection = section;
+                        const crash = actx.createBufferSource();
+                        crash.buffer = this.createNoise(1.5, 2);
+                        const crashGain = actx.createGain();
+                        const crashFilter = actx.createBiquadFilter();
+                        crashFilter.type = 'highpass';
+                        crashFilter.frequency.value = 4000;
+                        crashGain.gain.setValueAtTime(0.4, actx.currentTime);
+                        crashGain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 1.5);
+                        crash.connect(crashFilter);
+                        crashFilter.connect(crashGain);
+                        crashGain.connect(this.musicGain);
+                        crash.start();
+                    }
+                };
+                const crashInt = setInterval(playCrash, beatMs);
+                this.currentMusic.intervals.push(crashInt);
+
+                // ========== GLOBAL BEAT COUNTER ==========
+                const globalTick = () => {
+                    globalBeat++;
+                    section = Math.floor(globalBeat / 16) % 8;
+                };
+                const globalInt = setInterval(globalTick, sixteenthMs);
+                this.currentMusic.intervals.push(globalInt);
             }
 
             stopMusic() {
@@ -1765,10 +1805,14 @@
                 // Minigun status (set by Game class)
                 this.hasMinigun = false;
                 this.minigunRotation = 0;
+
+                // Super punch charge (set by Game class)
+                this.punchChargeLevel = 0; // 0-1
             }
 
             draw() {
                 const armOffset = this.isPunching ? 20 : 0;
+                const isCharging = this.punchChargeLevel > 0;
                 const p = 4; // Pixel size for Terraria style
 
                 // Draw ground smash effect
@@ -1900,9 +1944,84 @@
                     ctx.fillRect(drawX + 28, baseY + 20, p*2 + armOffset/2, p*2);
                     // Back arm
                     ctx.fillRect(drawX + 4, baseY + 22, p*2, p*3);
-                    // Fist
-                    ctx.fillStyle = '#e8c090';
-                    ctx.fillRect(drawX + 34 + armOffset/2, baseY + 20, p*2, p*2);
+
+                    // Fist - glow orb when charging super punch
+                    const fistX = drawX + 34 + armOffset/2 + p;
+                    const fistY = baseY + 20 + p;
+
+                    if (isCharging && this.punchChargeLevel > 0) {
+                        // Growing glowing orb around hand
+                        const glowIntensity = this.punchChargeLevel;
+                        const pulse = Math.sin(performance.now() / 80) * 0.2 + 0.8;
+                        const maxRadius = 25;
+                        const orbRadius = 5 + glowIntensity * maxRadius;
+
+                        // Outer glow (soft, large)
+                        const outerGradient = ctx.createRadialGradient(fistX, fistY, 0, fistX, fistY, orbRadius * 1.5);
+                        outerGradient.addColorStop(0, `rgba(255, ${Math.floor(200 * (1 - glowIntensity))}, 0, ${glowIntensity * pulse * 0.4})`);
+                        outerGradient.addColorStop(0.5, `rgba(255, ${Math.floor(150 * (1 - glowIntensity))}, 0, ${glowIntensity * pulse * 0.2})`);
+                        outerGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+                        ctx.fillStyle = outerGradient;
+                        ctx.beginPath();
+                        ctx.arc(fistX, fistY, orbRadius * 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Inner orb (bright, pulsing)
+                        const innerGradient = ctx.createRadialGradient(fistX, fistY, 0, fistX, fistY, orbRadius);
+                        const r = 255;
+                        const g = Math.floor(200 + 55 * glowIntensity);
+                        const b = Math.floor(100 * glowIntensity);
+                        innerGradient.addColorStop(0, `rgba(255, 255, ${Math.floor(200 * glowIntensity)}, ${pulse})`);
+                        innerGradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${pulse * 0.7})`);
+                        innerGradient.addColorStop(1, `rgba(255, ${Math.floor(100 * (1 - glowIntensity))}, 0, 0)`);
+                        ctx.fillStyle = innerGradient;
+                        ctx.beginPath();
+                        ctx.arc(fistX, fistY, orbRadius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Electric arcs when charging
+                        if (glowIntensity > 0.3) {
+                            ctx.strokeStyle = `rgba(255, 255, ${Math.floor(200 * glowIntensity)}, ${pulse * glowIntensity})`;
+                            ctx.lineWidth = 1 + glowIntensity;
+                            for (let i = 0; i < Math.floor(glowIntensity * 4); i++) {
+                                const angle = Math.random() * Math.PI * 2;
+                                const len = orbRadius * (0.8 + Math.random() * 0.5);
+                                ctx.beginPath();
+                                ctx.moveTo(fistX, fistY);
+                                // Jagged lightning
+                                let px = fistX, py = fistY;
+                                for (let j = 0; j < 3; j++) {
+                                    const nx = fistX + Math.cos(angle) * len * (j + 1) / 3 + (Math.random() - 0.5) * 8;
+                                    const ny = fistY + Math.sin(angle) * len * (j + 1) / 3 + (Math.random() - 0.5) * 8;
+                                    ctx.lineTo(nx, ny);
+                                    px = nx; py = ny;
+                                }
+                                ctx.stroke();
+                            }
+                        }
+
+                        // Sparkles orbiting when fully charged
+                        if (this.punchChargeLevel >= 1) {
+                            const time = performance.now() / 200;
+                            for (let i = 0; i < 6; i++) {
+                                const angle = time + (i / 6) * Math.PI * 2;
+                                const sparkX = fistX + Math.cos(angle) * orbRadius * 0.8;
+                                const sparkY = fistY + Math.sin(angle) * orbRadius * 0.8;
+                                ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
+                                ctx.beginPath();
+                                ctx.arc(sparkX, sparkY, 2 + Math.random(), 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+
+                        // Draw fist on top (glowing color)
+                        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        ctx.fillRect(drawX + 34 + armOffset/2, baseY + 20, p*2, p*2);
+                    } else {
+                        // Normal fist
+                        ctx.fillStyle = '#e8c090';
+                        ctx.fillRect(drawX + 34 + armOffset/2, baseY + 20, p*2, p*2);
+                    }
                 }
 
                 // Weapon/Gun silhouette when not punching
@@ -2156,21 +2275,21 @@
                         this.width = 30;
                         this.height = 50;
                         this.health = 80;
-                        this.speed = this.baseSpeed * 2;
+                        this.speed = this.baseSpeed * 2; // Fast zombie keeps normal speed
                         break;
                     case ZOMBIE_TYPE.RADIOACTIVE:
                         this.width = 35;
                         this.height = 55;
                         this.health = 100;
-                        this.speed = this.baseSpeed;
-                        this.radioactiveRadius = 80;
+                        this.speed = this.baseSpeed * 0.5; // 0.5x speed
+                        this.radioactiveRadius = 150; // Bigger radius for slowdown
                         this.hasExploded = false;
                         break;
                     case ZOMBIE_TYPE.JUMPING:
                         this.width = 35;
                         this.height = 55;
                         this.health = 100;
-                        this.speed = this.baseSpeed;
+                        this.speed = this.baseSpeed * 0.5; // 0.5x speed
                         this.jumpTimer = Math.random() * 1000;
                         this.jumpInterval = 1500 + Math.random() * 500;
                         this.velocityY = 0;
@@ -2180,19 +2299,19 @@
                         this.width = 105; // 3x width
                         this.height = 165; // 3x height
                         this.health = 200;
-                        this.speed = this.baseSpeed / 1.5;
+                        this.speed = this.baseSpeed * 0.5 / 1.5; // 0.5x speed, slower for large
                         break;
                     case ZOMBIE_TYPE.TITAN:
                         this.width = 140; // 4x width
                         this.height = 220; // 4x height
                         this.health = 500;
-                        this.speed = this.baseSpeed / 2;
+                        this.speed = this.baseSpeed * 0.5 / 2; // 0.5x speed, slower for titan
                         break;
                     default: // NORMAL
                         this.width = 35;
                         this.height = 55;
                         this.health = ZOMBIE_HEALTH;
-                        this.speed = this.baseSpeed;
+                        this.speed = this.baseSpeed * 0.5; // 0.5x speed
                 }
 
                 this.maxHealth = this.health;
@@ -2266,8 +2385,21 @@
                         clothDark = flashMix > 0 ? this.mixColors('#303030', '#ffffff', flashMix) : '#303030';
                         eyeColor = '#ffff00';
                         eyeGlow = 'rgba(100, 255, 100, 0.5)';
-                        // Draw radioactive glow around zombie
-                        ctx.fillStyle = 'rgba(80, 255, 80, 0.15)';
+                        // Draw radioactive danger zone
+                        const pulse = Math.sin(performance.now() / 300) * 0.05 + 0.1;
+                        const gradient = ctx.createRadialGradient(
+                            drawX + this.width/2, this.y + this.height/2, 0,
+                            drawX + this.width/2, this.y + this.height/2, this.radioactiveRadius
+                        );
+                        gradient.addColorStop(0, `rgba(80, 255, 80, ${pulse + 0.1})`);
+                        gradient.addColorStop(0.5, `rgba(80, 255, 80, ${pulse * 0.5})`);
+                        gradient.addColorStop(1, 'rgba(80, 255, 80, 0)');
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(drawX + this.width/2, this.y + this.height/2, this.radioactiveRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Inner glow around zombie
+                        ctx.fillStyle = 'rgba(80, 255, 80, 0.2)';
                         ctx.beginPath();
                         ctx.arc(drawX + this.width/2, this.y + this.height/2, this.width, 0, Math.PI * 2);
                         ctx.fill();
@@ -2876,6 +3008,11 @@
                 this.minigunUnlockAnnouncement = false;
                 this.minigunAnnouncementTime = 0;
 
+                // Super punch charge tracking
+                this.punchChargeStart = 0;
+                this.isPunchCharging = false;
+                this.superPunchReady = false;
+
                 this.setupInput();
             }
 
@@ -2907,8 +3044,10 @@
                         if (this.state === SPLASH) {
                             this.startGame();
                         } else if (this.state === PLAYING && !wasPressed) {
-                            // Only punch on fresh key press (tap)
-                            this.handlePunch();
+                            // Start charging punch
+                            this.punchChargeStart = performance.now();
+                            this.isPunchCharging = true;
+                            this.superPunchReady = false;
                         }
                     }
 
@@ -2921,11 +3060,11 @@
                         this.handleShoot();
                     }
 
-                    if (key === 'w' && this.state === PLAYING && !wasPressed) {
+                    if ((key === 'w' || e.code === 'ArrowUp') && this.state === PLAYING && !wasPressed) {
                         this.handleJump();
                     }
 
-                    if (key === 's' && this.state === PLAYING && !wasPressed) {
+                    if ((key === 's' || e.code === 'ArrowDown') && this.state === PLAYING && !wasPressed) {
                         this.handleGroundSmash();
                     }
                 });
@@ -2933,6 +3072,19 @@
                 window.addEventListener('keyup', (e) => {
                     this.keys[e.key.toLowerCase()] = false;
                     this.keysJustPressed[e.key.toLowerCase()] = false;
+
+                    // Handle punch release
+                    if (e.key === ' ' && this.state === PLAYING && this.isPunchCharging) {
+                        const chargeTime = performance.now() - this.punchChargeStart;
+                        this.isPunchCharging = false;
+                        if (chargeTime >= 2000) {
+                            // Super punch!
+                            this.handleSuperPunch();
+                        } else {
+                            // Normal punch
+                            this.handlePunch();
+                        }
+                    }
                 });
 
                 // Touch controls
@@ -2963,10 +3115,23 @@
                     if (this.state === SPLASH) {
                         this.startGame();
                     } else if (this.state === GAME_OVER) {
-                        // Tap anywhere to restart on mobile (game over)
                         this.startGame();
-                    } else {
-                        this.handlePunch();
+                    } else if (this.state === PLAYING) {
+                        // Start charging punch
+                        this.punchChargeStart = performance.now();
+                        this.isPunchCharging = true;
+                        this.superPunchReady = false;
+                    }
+                });
+                btnPunch.addEventListener('touchend', (e) => {
+                    if (this.state === PLAYING && this.isPunchCharging) {
+                        const chargeTime = performance.now() - this.punchChargeStart;
+                        this.isPunchCharging = false;
+                        if (chargeTime >= 2000) {
+                            this.handleSuperPunch();
+                        } else {
+                            this.handlePunch();
+                        }
                     }
                 });
 
@@ -3120,6 +3285,109 @@
                     if (hitCount > 1) {
                         this.screenEffects.shake(5, 0.1);
                     }
+                }
+            }
+
+            handleSuperPunch() {
+                // Super punch - 50 damage, no cooldown, big effects!
+                this.player.isPunching = true;
+                this.player.punchAnimTime = 250;
+                soundManager.playPunch();
+                soundManager.playGroundSmash(); // Extra impact sound
+
+                // Big screen effects
+                this.screenEffects.shake(12, 0.3);
+                this.screenEffects.flash('rgba(255, 200, 0, 0.4)', 0.3);
+                this.screenEffects.hitstop(0.1);
+                this.screenEffects.triggerChromatic(2);
+
+                // Super punch particles
+                const punchX = this.player.facingRight ?
+                    this.player.x + this.player.width + 20 :
+                    this.player.x - 20;
+                this.particles.emit(punchX, this.player.y + 30, 20, {
+                    angle: this.player.facingRight ? 0 : Math.PI,
+                    spread: Math.PI * 0.5,
+                    speed: 300,
+                    colors: ['#ffff00', '#ff8800', '#ffffff', '#ffaa00'],
+                    size: 12,
+                    life: 0.5,
+                    gravity: 100,
+                    friction: 0.95
+                });
+
+                // Check for zombie hits with larger hitbox
+                const punchBox = this.player.getPunchHitbox();
+                // Extend the hitbox for super punch
+                const superPunchBox = {
+                    x: punchBox.x - 20,
+                    y: punchBox.y - 10,
+                    width: punchBox.width + 40,
+                    height: punchBox.height + 20
+                };
+
+                let hitCount = 0;
+                this.zombies.forEach(zombie => {
+                    if (!zombie.dead && this.checkCollision(superPunchBox, zombie.getHitbox())) {
+                        // Super punch always knocks back hard
+                        const result = zombie.takeDamage(50, 80);
+                        soundManager.playHit(1.2 + Math.random() * 0.3);
+
+                        if (result.died) {
+                            const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
+                                                   zombie.type === ZOMBIE_TYPE.LARGE ? 3 : 1;
+                            this.score += KILL_SCORE * scoreMultiplier;
+                            this.highScore = Math.max(this.highScore, this.score);
+
+                            if (zombie.type === ZOMBIE_TYPE.TITAN) {
+                                this.activeTitan = null;
+                                this.screenEffects.shake(20, 0.5);
+                                this.screenEffects.flash('rgba(255, 0, 255, 0.5)', 0.5);
+                            }
+                            this.screenEffects.hitstop(0.08);
+                            this.screenEffects.shake(10, 0.2);
+                            soundManager.playZombieDeath();
+
+                            // Death particles
+                            const deathColors = zombie.type === ZOMBIE_TYPE.TITAN ?
+                                ['#8800ff', '#ff00ff', '#cc00cc', '#4a3a5a'] :
+                                ['#ffff00', '#ff8800', '#ff0000', '#8b0000'];
+                            this.particles.emit(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2, 25 * zombie.scale, {
+                                angle: this.player.facingRight ? 0 : Math.PI,
+                                spread: Math.PI * 0.8,
+                                speed: 400,
+                                colors: deathColors,
+                                size: 12 * zombie.scale,
+                                life: 1,
+                                gravity: 400,
+                                friction: 0.97
+                            });
+                        }
+
+                        // Damage number (yellow for super punch)
+                        this.damageNumbers.push(new DamageNumber(
+                            zombie.x + zombie.width / 2,
+                            zombie.y,
+                            50,
+                            '#ffff00',
+                            true
+                        ));
+
+                        // Big hit effect
+                        this.hitEffects.push({
+                            x: zombie.x + zombie.width / 2,
+                            y: zombie.y + zombie.height / 2,
+                            life: 0.3,
+                            type: 'punch'
+                        });
+                        hitCount++;
+                    }
+                });
+
+                // Multi-hit bonus effects
+                if (hitCount > 1) {
+                    this.screenEffects.shake(15, 0.3);
+                    this.screenEffects.triggerChromatic(4);
                 }
             }
 
@@ -3418,6 +3686,9 @@
                 this.hasMinigun = false;
                 this.minigunUnlockAnnouncement = false;
                 this.minigunAnnouncementTime = 0;
+                this.punchChargeStart = 0;
+                this.isPunchCharging = false;
+                this.superPunchReady = false;
                 soundManager.playBackgroundMusic();
             }
 
@@ -3447,6 +3718,28 @@
                 const wasInAir = this.player.y < this.player.groundY;
 
                 // Handle player slowdown from radioactive zombies
+                // Check if player is inside any living radioactive zombie's radius
+                const playerCenter = {
+                    x: this.player.x + this.player.width / 2,
+                    y: this.player.y + this.player.height / 2
+                };
+                let inRadioactiveZone = false;
+                for (let zombie of this.zombies) {
+                    if (zombie.type === ZOMBIE_TYPE.RADIOACTIVE && !zombie.dead) {
+                        const zombieCenter = zombie.getCenter();
+                        const dist = Math.sqrt(
+                            Math.pow(zombieCenter.x - playerCenter.x, 2) +
+                            Math.pow(zombieCenter.y - playerCenter.y, 2)
+                        );
+                        if (dist <= zombie.radioactiveRadius) {
+                            inRadioactiveZone = true;
+                            // Apply 5 second slow each frame while in zone
+                            this.playerSlowedUntil = currentTime + 5000;
+                            break;
+                        }
+                    }
+                }
+
                 if (currentTime < this.playerSlowedUntil) {
                     this.player.speed = this.playerNormalSpeed / 2;
                 } else {
@@ -3459,6 +3752,19 @@
                 // Continuous minigun firing when Q is held
                 if (this.hasMinigun && this.keys['q']) {
                     this.handleShoot();
+                }
+
+                // Update super punch charge status
+                if (this.isPunchCharging) {
+                    const chargeTime = performance.now() - this.punchChargeStart;
+                    this.player.punchChargeLevel = Math.min(chargeTime / 2000, 1);
+                    if (chargeTime >= 2000 && !this.superPunchReady) {
+                        this.superPunchReady = true;
+                        // Flash to indicate ready
+                        this.screenEffects.flash('rgba(255, 255, 0, 0.3)', 0.2);
+                    }
+                } else {
+                    this.player.punchChargeLevel = 0;
                 }
 
                 // Landing dust particles and sound
@@ -3618,8 +3924,9 @@
                     const projHitbox = projectile.getHitbox();
                     for (let zombie of this.zombies) {
                         if (!zombie.dead && this.checkCollision(projHitbox, zombie.getHitbox())) {
-                            // Shooting always knocks back
-                            const result = zombie.takeDamage(projectile.damage, 45);
+                            // Shooting knocks back (but not minigun)
+                            const knockback = projectile.isMinigun ? 0 : 45;
+                            const result = zombie.takeDamage(projectile.damage, knockback);
                             soundManager.playHit(1.2 + Math.random() * 0.3);
                             if (result.died) {
                                 const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
