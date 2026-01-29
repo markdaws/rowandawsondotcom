@@ -315,7 +315,7 @@
         const GROUND_SMASH_COOLDOWN = 2000;
         const PUNCH_DAMAGE = 10;
         const SHOOT_DAMAGE = 100;
-        const MINIGUN_DAMAGE = 1;
+        const MINIGUN_DAMAGE = 100;
         const GROUND_SMASH_DAMAGE = 50;
         const GROUND_SMASH_RADIUS = 120;
         const ZOMBIE_HEALTH = 100;
@@ -331,10 +331,45 @@
         const JUMP_VELOCITY = -400;
         const GRAVITY = 1200;
 
+        // New weapon damages
+        const SHOTGUN_DAMAGE = 30; // Per pellet, 5 pellets
+        const ROCKET_DAMAGE = 150;
+        const ROCKET_RADIUS = 100;
+        const FLAMETHROWER_DAMAGE = 5; // Per tick
+        const GRENADE_DAMAGE = 120;
+        const GRENADE_RADIUS = 80;
+        const MAX_GRENADES = 3;
+
+        // Dash ability
+        const DASH_SPEED = 600;
+        const DASH_DURATION = 150; // ms
+        const DASH_COOLDOWN = 1000; // ms
+
+        // Combo system
+        const COMBO_TIMEOUT = 2000; // ms to maintain combo
+        const COMBO_MULTIPLIER_MAX = 5;
+
+        // Ultimate ability
+        const ULTIMATE_CHARGE_PER_KILL = 5; // percentage
+        const ULTIMATE_DAMAGE = 200;
+
+        // Wave system
+        const WAVE_DURATION = 20000; // 20 seconds per wave
+        const WAVE_BREAK_DURATION = 5000; // 5 second break
+
         // Game States
         const SPLASH = 'SPLASH';
         const PLAYING = 'PLAYING';
         const GAME_OVER = 'GAME_OVER';
+        const PAUSED = 'PAUSED';
+        const UPGRADE_MENU = 'UPGRADE_MENU';
+
+        // Difficulty settings
+        const DIFFICULTY = {
+            EASY: { spawnMultiplier: 0.7, healthMultiplier: 0.8, damageMultiplier: 0.8 },
+            NORMAL: { spawnMultiplier: 1, healthMultiplier: 1, damageMultiplier: 1 },
+            HARD: { spawnMultiplier: 1.5, healthMultiplier: 1.3, damageMultiplier: 1.3 }
+        };
 
         // ============================================
         // TERRARIA-STYLE PARALLAX BACKGROUND
@@ -2258,7 +2293,17 @@
             RADIOACTIVE: 'radioactive',
             JUMPING: 'jumping',
             LARGE: 'large',      // Mini Boss
-            TITAN: 'titan'       // Mega Boss
+            TITAN: 'titan',      // Mega Boss
+            ARMORED: 'armored',  // Must punch to break armor first
+            EXPLODING: 'exploding' // Runs fast and explodes on contact
+        };
+
+        // Power-up types
+        const POWERUP_TYPE = {
+            HEALTH: 'health',
+            DAMAGE_BOOST: 'damage_boost',
+            SPEED_BOOST: 'speed_boost',
+            SHIELD: 'shield'
         };
 
         // ============================================
@@ -2306,6 +2351,23 @@
                         this.height = 220; // 4x height
                         this.health = 500;
                         this.speed = this.baseSpeed * 0.5 / 2; // 0.5x speed, slower for titan
+                        break;
+                    case ZOMBIE_TYPE.ARMORED:
+                        this.width = 40;
+                        this.height = 60;
+                        this.health = 150;
+                        this.speed = this.baseSpeed * 0.4; // Slow but tanky
+                        this.hasArmor = true;
+                        this.armorHealth = 20; // Base armor - gets scaled by wave when spawned
+                        break;
+                    case ZOMBIE_TYPE.EXPLODING:
+                        this.width = 30;
+                        this.height = 50;
+                        this.health = 50; // Low health
+                        this.speed = this.baseSpeed * 1.8; // Very fast
+                        this.isExploding = false;
+                        this.explosionRadius = 60;
+                        this.explosionDamage = 30;
                         break;
                     default: // NORMAL
                         this.width = 35;
@@ -2434,6 +2496,41 @@
                         ctx.fillStyle = 'rgba(100, 0, 150, 0.2)';
                         ctx.beginPath();
                         ctx.arc(drawX + this.width/2, this.y + this.height/2, this.width * 0.8, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case ZOMBIE_TYPE.ARMORED:
+                        // Armored zombie - metallic gray with armor plates
+                        skinColor = flashMix > 0 ? this.mixColors('#6a7a6a', '#ffffff', flashMix) : '#6a7a6a';
+                        skinDark = flashMix > 0 ? this.mixColors('#4a5a4a', '#ffffff', flashMix) : '#4a5a4a';
+                        clothColor = flashMix > 0 ? this.mixColors('#8a8a8a', '#ffffff', flashMix) : '#8a8a8a';
+                        clothDark = flashMix > 0 ? this.mixColors('#5a5a5a', '#ffffff', flashMix) : '#5a5a5a';
+                        eyeColor = '#88ff88';
+                        eyeGlow = 'rgba(100, 255, 100, 0.4)';
+                        // Draw armor plates if has armor
+                        if (this.hasArmor) {
+                            ctx.fillStyle = 'rgba(150, 150, 170, 0.8)';
+                            ctx.fillRect(drawX + 5, baseY + 20, this.width - 10, 25);
+                            ctx.strokeStyle = '#aaaacc';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(drawX + 5, baseY + 20, this.width - 10, 25);
+                            // Helmet
+                            ctx.fillStyle = '#8888aa';
+                            ctx.fillRect(drawX + 8, baseY + 2, this.width - 16, 15);
+                        }
+                        break;
+                    case ZOMBIE_TYPE.EXPLODING:
+                        // Exploding zombie - red/orange, glowing, unstable
+                        skinColor = flashMix > 0 ? this.mixColors('#aa4040', '#ffffff', flashMix) : '#aa4040';
+                        skinDark = flashMix > 0 ? this.mixColors('#802020', '#ffffff', flashMix) : '#802020';
+                        clothColor = flashMix > 0 ? this.mixColors('#553322', '#ffffff', flashMix) : '#553322';
+                        clothDark = flashMix > 0 ? this.mixColors('#331100', '#ffffff', flashMix) : '#331100';
+                        eyeColor = '#ffff00';
+                        eyeGlow = 'rgba(255, 255, 0, 0.6)';
+                        // Pulsing danger glow
+                        const pulseIntensity = 0.3 + Math.sin(performance.now() / 100) * 0.2;
+                        ctx.fillStyle = `rgba(255, 100, 0, ${pulseIntensity})`;
+                        ctx.beginPath();
+                        ctx.arc(drawX + this.width/2, baseY + this.height/2, this.width * 0.8, 0, Math.PI * 2);
                         ctx.fill();
                         break;
                     default: // NORMAL
@@ -2639,6 +2736,10 @@
                     healthColor = '#50ffff';
                 } else if (this.type === ZOMBIE_TYPE.TITAN) {
                     healthColor = '#ff00ff';
+                } else if (this.type === ZOMBIE_TYPE.ARMORED) {
+                    healthColor = '#8888cc';
+                } else if (this.type === ZOMBIE_TYPE.EXPLODING) {
+                    healthColor = '#ff6600';
                 } else {
                     healthColor = healthPercent > 0.5 ? '#4CAF50' : healthPercent > 0.25 ? '#FF9800' : '#f44336';
                 }
@@ -2659,7 +2760,9 @@
                                  this.type === ZOMBIE_TYPE.RADIOACTIVE ? 'RAD' :
                                  this.type === ZOMBIE_TYPE.JUMPING ? 'JUMP' :
                                  this.type === ZOMBIE_TYPE.LARGE ? 'MINI BOSS' :
-                                 this.type === ZOMBIE_TYPE.TITAN ? 'TITAN' : '';
+                                 this.type === ZOMBIE_TYPE.TITAN ? 'TITAN' :
+                                 this.type === ZOMBIE_TYPE.ARMORED ? 'ARMOR' :
+                                 this.type === ZOMBIE_TYPE.EXPLODING ? 'BOOM' : '';
                     ctx.fillText(label, this.x + this.width/2, barY - 2);
                 }
             }
@@ -2767,7 +2870,30 @@
                 return { remove: false, damage: 0, radioactiveDeath: false };
             }
 
-            takeDamage(amount, knockbackAmount = 15) {
+            takeDamage(amount, knockbackAmount = 15, isPunch = false) {
+                // Armored zombie: shooting does reduced damage if armor is intact
+                // Punch does damage to armor instead
+                if (this.type === ZOMBIE_TYPE.ARMORED && this.hasArmor) {
+                    if (isPunch) {
+                        // Punches damage armor
+                        this.armorHealth -= amount * 2; // Punches are effective against armor
+                        if (this.armorHealth <= 0) {
+                            this.hasArmor = false;
+                            // Armor break effect
+                            this.squashX = 1.5;
+                            this.squashY = 0.6;
+                        }
+                        // Minimal knockback with armor
+                        this.knockback = knockbackAmount * 0.3 / this.scale;
+                        this.knockbackVelocity = (knockbackAmount * 5) / this.scale;
+                        this.hitFlash = 1;
+                        return { died: false, isRadioactive: false, armorBroken: !this.hasArmor };
+                    } else {
+                        // Shooting does reduced damage to armored zombies
+                        amount *= 0.3;
+                    }
+                }
+
                 this.health -= amount;
 
                 // Hit juice - scale knockback for large zombies
@@ -2781,9 +2907,9 @@
                 if (this.health <= 0) {
                     this.dead = true;
                     this.deathVelocityY = -150 / this.scale;
-                    return { died: true, isRadioactive: this.type === ZOMBIE_TYPE.RADIOACTIVE };
+                    return { died: true, isRadioactive: this.type === ZOMBIE_TYPE.RADIOACTIVE, isExploding: this.type === ZOMBIE_TYPE.EXPLODING };
                 }
-                return { died: false, isRadioactive: false };
+                return { died: false, isRadioactive: false, isExploding: false };
             }
 
             // Get center position for radioactive effect
@@ -2808,17 +2934,18 @@
         // PROJECTILE CLASS
         // ============================================
         class Projectile {
-            constructor(x, y, direction = 1, damage = SHOOT_DAMAGE, isMinigun = false) {
+            constructor(x, y, direction = 1, damage = SHOOT_DAMAGE, isMinigun = false, isTurret = false) {
                 this.x = x;
                 this.y = y;
                 this.direction = direction; // 1 = right, -1 = left
-                this.width = isMinigun ? 6 : 10;
-                this.height = isMinigun ? 3 : 5;
+                this.width = isMinigun ? 6 : (isTurret ? 6 : 10);
+                this.height = isMinigun ? 3 : (isTurret ? 4 : 5);
                 this.speed = PROJECTILE_SPEED;
                 this.damage = damage;
                 this.isMinigun = isMinigun;
+                this.isTurret = isTurret;
                 this.trail = [];
-                this.trailLength = isMinigun ? 4 : 8;
+                this.trailLength = isMinigun ? 4 : (isTurret ? 5 : 8);
             }
 
             draw() {
@@ -2960,6 +3087,295 @@
         }
 
         // ============================================
+        // POWERUP CLASS
+        // ============================================
+        class PowerUp {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.width = 20;
+                this.height = 20;
+                this.bobOffset = Math.random() * Math.PI * 2;
+                this.lifetime = 10; // seconds before disappearing
+                this.age = 0;
+            }
+
+            draw() {
+                const bob = Math.sin(performance.now() / 200 + this.bobOffset) * 5;
+                const drawY = this.y + bob;
+
+                // Glow effect
+                const glowColors = {
+                    [POWERUP_TYPE.HEALTH]: 'rgba(0, 255, 0, 0.3)',
+                    [POWERUP_TYPE.DAMAGE_BOOST]: 'rgba(255, 0, 0, 0.3)',
+                    [POWERUP_TYPE.SPEED_BOOST]: 'rgba(0, 200, 255, 0.3)',
+                    [POWERUP_TYPE.SHIELD]: 'rgba(255, 255, 0, 0.3)'
+                };
+                ctx.fillStyle = glowColors[this.type];
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, drawY + this.height/2, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Icon background
+                const bgColors = {
+                    [POWERUP_TYPE.HEALTH]: '#00aa00',
+                    [POWERUP_TYPE.DAMAGE_BOOST]: '#aa0000',
+                    [POWERUP_TYPE.SPEED_BOOST]: '#0088cc',
+                    [POWERUP_TYPE.SHIELD]: '#ccaa00'
+                };
+                ctx.fillStyle = bgColors[this.type];
+                ctx.fillRect(this.x, drawY, this.width, this.height);
+
+                // Border
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, drawY, this.width, this.height);
+
+                // Icon symbol
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const symbols = {
+                    [POWERUP_TYPE.HEALTH]: '+',
+                    [POWERUP_TYPE.DAMAGE_BOOST]: '!',
+                    [POWERUP_TYPE.SPEED_BOOST]: '>',
+                    [POWERUP_TYPE.SHIELD]: 'O'
+                };
+                ctx.fillText(symbols[this.type], this.x + this.width/2, drawY + this.height/2);
+            }
+
+            update(deltaTime) {
+                this.age += deltaTime;
+                return this.age >= this.lifetime; // Return true to remove
+            }
+        }
+
+        // ============================================
+        // GRENADE CLASS
+        // ============================================
+        class Grenade {
+            constructor(x, y, targetX, targetY) {
+                this.x = x;
+                this.y = y;
+                this.targetX = targetX;
+                this.targetY = CANVAS_HEIGHT - 20; // Ground level
+                this.width = 10;
+                this.height = 10;
+
+                // Calculate arc trajectory
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const flightTime = 0.8; // seconds
+                this.velocityX = dx / flightTime;
+                this.velocityY = (dy / flightTime) - (0.5 * GRAVITY * flightTime);
+
+                this.rotation = 0;
+                this.exploded = false;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+
+                // Grenade body
+                ctx.fillStyle = '#3a5a3a';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 6, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pin/top
+                ctx.fillStyle = '#888888';
+                ctx.fillRect(-2, -10, 4, 4);
+
+                // Highlight
+                ctx.fillStyle = '#5a7a5a';
+                ctx.beginPath();
+                ctx.ellipse(-2, -2, 2, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            update(deltaTime) {
+                this.velocityY += GRAVITY * deltaTime;
+                this.x += this.velocityX * deltaTime;
+                this.y += this.velocityY * deltaTime;
+                this.rotation += 10 * deltaTime;
+
+                // Hit ground
+                if (this.y >= CANVAS_HEIGHT - 20) {
+                    this.exploded = true;
+                }
+                return this.exploded;
+            }
+        }
+
+        // ============================================
+        // ROCKET CLASS
+        // ============================================
+        class Rocket {
+            constructor(x, y, direction = 1) {
+                this.x = x;
+                this.y = y;
+                this.direction = direction;
+                this.width = 20;
+                this.height = 8;
+                this.speed = 350;
+                this.trail = [];
+            }
+
+            draw() {
+                // Smoke trail
+                ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
+                for (let i = 0; i < this.trail.length; i++) {
+                    const t = this.trail[i];
+                    const alpha = (1 - i / this.trail.length) * 0.5;
+                    ctx.globalAlpha = alpha;
+                    ctx.beginPath();
+                    ctx.arc(t.x, t.y, 3 + i * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+
+                // Rocket body
+                ctx.fillStyle = '#4a4a4a';
+                ctx.fillRect(this.x, this.y - this.height/2, this.width, this.height);
+
+                // Nose cone
+                ctx.fillStyle = '#aa0000';
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width, this.y - this.height/2);
+                ctx.lineTo(this.x + this.width + 8, this.y);
+                ctx.lineTo(this.x + this.width, this.y + this.height/2);
+                ctx.fill();
+
+                // Fins
+                ctx.fillStyle = '#666666';
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y - this.height/2);
+                ctx.lineTo(this.x - 5, this.y - this.height);
+                ctx.lineTo(this.x + 5, this.y - this.height/2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + this.height/2);
+                ctx.lineTo(this.x - 5, this.y + this.height);
+                ctx.lineTo(this.x + 5, this.y + this.height/2);
+                ctx.fill();
+
+                // Flame
+                ctx.fillStyle = '#ff6600';
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y - 3);
+                ctx.lineTo(this.x - 10 - Math.random() * 5, this.y);
+                ctx.lineTo(this.x, this.y + 3);
+                ctx.fill();
+                ctx.fillStyle = '#ffff00';
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y - 2);
+                ctx.lineTo(this.x - 6 - Math.random() * 3, this.y);
+                ctx.lineTo(this.x, this.y + 2);
+                ctx.fill();
+            }
+
+            update(deltaTime) {
+                // Add to trail
+                this.trail.unshift({ x: this.x, y: this.y });
+                if (this.trail.length > 10) this.trail.pop();
+
+                this.x += this.speed * this.direction * deltaTime;
+
+                // Off screen
+                return this.x > CANVAS_WIDTH + 50 || this.x < -50;
+            }
+        }
+
+        // ============================================
+        // BASE TURRET CLASS
+        // ============================================
+        class BaseTurret {
+            constructor(base) {
+                this.base = base;
+                this.x = base.x + base.width - 20;
+                this.y = base.y - 30;
+                this.angle = 0;
+                this.fireRate = 2000; // ms between shots
+                this.lastFireTime = 0;
+                this.damage = 25;
+                this.range = 300;
+                this.level = 1;
+            }
+
+            draw() {
+                // Turret base
+                ctx.fillStyle = '#3a3a3a';
+                ctx.fillRect(this.x - 10, this.y + 5, 20, 15);
+
+                // Turret barrel
+                ctx.save();
+                ctx.translate(this.x, this.y + 5);
+                ctx.rotate(this.angle);
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(0, -3, 25, 6);
+                ctx.fillStyle = '#4a4a4a';
+                ctx.fillRect(0, -2, 20, 4);
+                ctx.restore();
+
+                // Turret dome
+                ctx.fillStyle = '#4a6a4a';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y + 5, 12, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#5a8a5a';
+                ctx.beginPath();
+                ctx.arc(this.x - 3, this.y, 5, Math.PI, 0);
+                ctx.fill();
+            }
+
+            update(currentTime, zombies, projectiles) {
+                // Find closest zombie in range
+                let closestZombie = null;
+                let closestDist = this.range;
+
+                for (let zombie of zombies) {
+                    if (zombie.dead) continue;
+                    const dx = zombie.x + zombie.width/2 - this.x;
+                    const dy = zombie.y + zombie.height/2 - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestZombie = zombie;
+                    }
+                }
+
+                if (closestZombie) {
+                    // Aim at zombie
+                    const dx = closestZombie.x + closestZombie.width/2 - this.x;
+                    const dy = closestZombie.y + closestZombie.height/2 - this.y;
+                    this.angle = Math.atan2(dy, dx);
+
+                    // Fire if ready
+                    if (currentTime - this.lastFireTime >= this.fireRate) {
+                        this.lastFireTime = currentTime;
+                        // Create turret projectile
+                        projectiles.push(new Projectile(
+                            this.x + Math.cos(this.angle) * 25,
+                            this.y + 5 + Math.sin(this.angle) * 25,
+                            1, // direction
+                            this.damage,
+                            false, // not minigun
+                            true // is turret shot
+                        ));
+                        return true; // Fired
+                    }
+                }
+                return false;
+            }
+        }
+
+        // ============================================
         // GAME CLASS
         // ============================================
         class Game {
@@ -3013,7 +3429,103 @@
                 this.isPunchCharging = false;
                 this.superPunchReady = false;
 
+                // === NEW GAMEPLAY SYSTEMS ===
+
+                // Combo system
+                this.comboCount = 0;
+                this.lastKillTime = 0;
+                this.comboMultiplier = 1;
+                this.killStreakAnnouncements = [];
+
+                // Power-ups
+                this.powerUps = [];
+                this.activePowerUps = {
+                    damageBoost: 0,
+                    speedBoost: 0,
+                    shield: 0
+                };
+
+                // Grenades
+                this.grenades = [];
+                this.grenadeCount = MAX_GRENADES;
+                this.lastGrenadeTime = 0;
+
+                // Rockets
+                this.rockets = [];
+
+                // Wave system
+                this.currentWave = 1;
+                this.waveStartTime = 0;
+                this.isWaveBreak = false;
+                this.waveBreakStartTime = 0;
+                this.waveAnnouncement = '';
+                this.waveAnnouncementTime = 0;
+
+                // Ultimate ability
+                this.ultimateCharge = 0;
+                this.ultimateActive = false;
+
+                // Dash ability
+                this.isDashing = false;
+                this.dashStartTime = 0;
+                this.dashDirection = 1;
+                this.lastDashTime = 0;
+
+                // Weapon unlocks
+                this.unlockedWeapons = {
+                    pistol: true,
+                    shotgun: false,
+                    rocketLauncher: false,
+                    flamethrower: false
+                };
+                this.currentWeapon = 'pistol';
+                this.flamethrowerActive = false;
+                this.lastFlamethrowerTime = 0;
+
+                // Base turret
+                this.baseTurret = null; // Created when game starts
+
+                // Difficulty
+                this.difficulty = DIFFICULTY.NORMAL;
+                this.difficultyName = 'NORMAL';
+
+                // High score persistence
+                this.loadHighScore();
+
+                // Milestone tracking
+                this.lastMilestoneScore = 0;
+                this.milestoneAnnouncement = '';
+                this.milestoneAnnouncementTime = 0;
+
+                // Slow motion for last zombie
+                this.slowMotionActive = false;
+                this.slowMotionEndTime = 0;
+
+                // Nuke cutscene
+                this.nukeCutscene = null;
+
+                // Zombies from both sides
+                this.spawnFromLeft = false;
+                this.leftSpawnChance = 0.1; // 10% chance
+
                 this.setupInput();
+            }
+
+            loadHighScore() {
+                try {
+                    const saved = localStorage.getItem('smashersHighScore');
+                    if (saved) this.highScore = parseInt(saved) || 0;
+                } catch (e) {
+                    // localStorage not available
+                }
+            }
+
+            saveHighScore() {
+                try {
+                    localStorage.setItem('smashersHighScore', this.highScore.toString());
+                } catch (e) {
+                    // localStorage not available
+                }
             }
 
             setupInput() {
@@ -3066,6 +3578,51 @@
 
                     if ((key === 's' || e.code === 'ArrowDown') && this.state === PLAYING && !wasPressed) {
                         this.handleGroundSmash();
+                    }
+
+                    // Dash with E or Shift
+                    if ((key === 'e' || e.code === 'ShiftLeft') && this.state === PLAYING && !wasPressed) {
+                        this.handleDash();
+                    }
+
+                    // Grenade with G
+                    if (key === 'g' && this.state === PLAYING && !wasPressed) {
+                        this.handleGrenade();
+                    }
+
+                    // Ultimate with R
+                    if (key === 'r' && this.state === PLAYING && !wasPressed) {
+                        this.handleUltimate();
+                    }
+
+                    // Pause with P or Escape
+                    if ((key === 'p' || key === 'escape') && !wasPressed) {
+                        if (this.state === PLAYING) {
+                            this.state = PAUSED;
+                        } else if (this.state === PAUSED) {
+                            this.state = PLAYING;
+                        }
+                    }
+
+                    // Weapon switching with 1-4
+                    if (key === '1' && this.state === PLAYING) this.currentWeapon = 'pistol';
+                    if (key === '2' && this.state === PLAYING && this.unlockedWeapons.shotgun) this.currentWeapon = 'shotgun';
+                    if (key === '3' && this.state === PLAYING && this.unlockedWeapons.rocketLauncher) this.currentWeapon = 'rocketLauncher';
+                    if (key === '4' && this.state === PLAYING && this.unlockedWeapons.flamethrower) this.currentWeapon = 'flamethrower';
+
+                    // Press 5 to unlock/select minigun
+                    if (key === '5' && this.state === PLAYING) {
+                        if (!this.hasMinigun) {
+                            // Unlock minigun
+                            this.hasMinigun = true;
+                            this.player.hasMinigun = true;
+                            this.minigunUnlockAnnouncement = true;
+                            this.minigunAnnouncementTime = performance.now();
+                            this.screenEffects.shake(10, 0.5);
+                            this.screenEffects.flash('rgba(255, 150, 0, 0.5)', 0.5);
+                            this.screenEffects.triggerChromatic(3);
+                        }
+                        this.currentWeapon = 'minigun';
                     }
                 });
 
@@ -3183,7 +3740,7 @@
                         if (!zombie.dead && this.checkCollision(punchBox, zombie.getHitbox())) {
                             // 10% chance to knock back on punch
                             const punchKnockback = Math.random() < 0.10 ? 50 : 0;
-                            const result = zombie.takeDamage(PUNCH_DAMAGE, punchKnockback);
+                            const result = zombie.takeDamage(PUNCH_DAMAGE, punchKnockback, true); // isPunch = true
                             soundManager.playHit(0.8 + Math.random() * 0.4);
                             if (result.died) {
                                 const scoreMultiplier = zombie.type === ZOMBIE_TYPE.TITAN ? 10 :
@@ -3330,7 +3887,7 @@
                 this.zombies.forEach(zombie => {
                     if (!zombie.dead && this.checkCollision(superPunchBox, zombie.getHitbox())) {
                         // Super punch always knocks back hard
-                        const result = zombie.takeDamage(50, 80);
+                        const result = zombie.takeDamage(50, 80, true); // isPunch = true
                         soundManager.playHit(1.2 + Math.random() * 0.3);
 
                         if (result.died) {
@@ -3394,95 +3951,124 @@
             handleShoot() {
                 const currentTime = performance.now();
 
-                // Check for minigun unlock: 10 consecutive jumps then shoot
-                if (!this.hasMinigun && this.consecutiveJumps >= 10) {
-                    this.hasMinigun = true;
-                    this.player.hasMinigun = true; // Sync with player for sprite
-                    this.minigunUnlockAnnouncement = true;
-                    this.minigunAnnouncementTime = currentTime;
-                    this.consecutiveJumps = 0;
-                    this.screenEffects.shake(10, 0.5);
-                    this.screenEffects.flash('rgba(255, 150, 0, 0.5)', 0.5);
-                    this.screenEffects.triggerChromatic(3);
-                }
+                const direction = this.player.facingRight ? 1 : -1;
+                const bulletX = this.player.facingRight ?
+                    this.player.x + this.player.width :
+                    this.player.x;
 
-                // Use minigun if unlocked
-                if (this.hasMinigun) {
+                // Calculate damage with damage boost
+                const damageMultiplier = this.activePowerUps.damageBoost > currentTime ? 2 : 1;
+
+                // Use minigun if selected and unlocked
+                if (this.currentWeapon === 'minigun' && this.hasMinigun) {
                     if (this.player.shootMinigun(currentTime)) {
                         soundManager.playShoot();
-
-                        // Spin the minigun barrels
                         this.player.minigunRotation += 0.8;
-
-                        // Smaller recoil for minigun
                         this.player.applyRecoil(2);
                         this.player.triggerMuzzleFlash();
-
-                        // Light screen shake
                         this.screenEffects.shake(1, 0.05);
 
-                        // Smaller muzzle smoke
                         this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 2, {
-                            angle: 0,
-                            spread: Math.PI * 0.2,
-                            speed: 50,
-                            colors: ['#888888', '#aaaaaa'],
-                            size: 5,
-                            life: 0.2,
-                            gravity: -30,
-                            friction: 0.95
+                            angle: 0, spread: Math.PI * 0.2, speed: 50,
+                            colors: ['#888888', '#aaaaaa'], size: 5, life: 0.2,
+                            gravity: -30, friction: 0.95
                         });
 
-                        // Shell casing - eject from gun
-                        const direction = this.player.facingRight ? 1 : -1;
-                        const shellX = this.player.facingRight ?
-                            this.player.x + this.player.width - 5 :
-                            this.player.x + 5;
+                        const shellX = this.player.facingRight ? this.player.x + this.player.width - 5 : this.player.x + 5;
                         this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, true));
 
-                        const bulletX = this.player.facingRight ?
-                            this.player.x + this.player.width :
-                            this.player.x;
-                        // Minigun bullet with lower damage and slight spread
                         const spread = (Math.random() - 0.5) * 8;
-                        this.projectiles.push(new Projectile(bulletX, this.player.y + 22 + spread, direction, MINIGUN_DAMAGE, true));
+                        this.projectiles.push(new Projectile(bulletX, this.player.y + 22 + spread, direction, MINIGUN_DAMAGE * damageMultiplier, true));
                     }
                 } else {
-                    // Regular gun
-                    if (this.player.shoot(currentTime)) {
-                        soundManager.playShoot();
+                    // Weapon-specific shooting
+                    switch (this.currentWeapon) {
+                        case 'shotgun':
+                            if (this.player.shoot(currentTime)) {
+                                soundManager.playShoot();
+                                this.player.applyRecoil(15);
+                                this.player.triggerMuzzleFlash();
+                                this.screenEffects.shake(8, 0.15);
+                                this.screenEffects.flash('rgba(255, 200, 0, 0.4)', 0.3);
 
-                        // Recoil and muzzle flash
-                        this.player.applyRecoil(8);
-                        this.player.triggerMuzzleFlash();
+                                // 5 pellets with spread
+                                for (let i = 0; i < 5; i++) {
+                                    const spread = (i - 2) * 15; // -30, -15, 0, 15, 30
+                                    this.projectiles.push(new Projectile(bulletX, this.player.y + 22 + spread, direction, SHOTGUN_DAMAGE * damageMultiplier, false));
+                                }
 
-                        // Screen shake
-                        this.screenEffects.shake(4, 0.1);
-                        this.screenEffects.flash('rgba(255, 200, 0, 0.3)', 0.3);
+                                // Multiple shell casings
+                                const shellX = this.player.facingRight ? this.player.x + this.player.width - 5 : this.player.x + 5;
+                                this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, false));
+                            }
+                            break;
 
-                        // Muzzle smoke particles
-                        this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 8, {
-                            angle: 0,
-                            spread: Math.PI * 0.3,
-                            speed: 80,
-                            colors: ['#888888', '#aaaaaa', '#666666'],
-                            size: 10,
-                            life: 0.4,
-                            gravity: -50,
-                            friction: 0.95
-                        });
+                        case 'rocketLauncher':
+                            if (this.player.shoot(currentTime)) {
+                                soundManager.playShoot();
+                                this.player.applyRecoil(20);
+                                this.screenEffects.shake(6, 0.2);
 
-                        // Shell casing - eject from gun
-                        const direction = this.player.facingRight ? 1 : -1;
-                        const shellX = this.player.facingRight ?
-                            this.player.x + this.player.width - 5 :
-                            this.player.x + 5;
-                        this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, false));
+                                // Fire rocket
+                                this.rockets.push(new Rocket(bulletX, this.player.y + 22, direction));
 
-                        const bulletX = this.player.facingRight ?
-                            this.player.x + this.player.width :
-                            this.player.x;
-                        this.projectiles.push(new Projectile(bulletX, this.player.y + 22, direction));
+                                this.particles.emit(bulletX, this.player.y + 22, 15, {
+                                    angle: Math.PI, spread: Math.PI * 0.4, speed: 100,
+                                    colors: ['#888888', '#666666'], size: 8, life: 0.5,
+                                    gravity: 50, friction: 0.95
+                                });
+                            }
+                            break;
+
+                        case 'flamethrower':
+                            // Continuous fire
+                            if (currentTime - this.lastFlamethrowerTime > 50) {
+                                this.lastFlamethrowerTime = currentTime;
+                                soundManager.playHit(0.3);
+
+                                // Fire particles as damage
+                                this.particles.emit(bulletX + 20 * direction, this.player.y + 22, 3, {
+                                    angle: direction > 0 ? 0 : Math.PI, spread: Math.PI * 0.3, speed: 300,
+                                    colors: ['#ff6600', '#ffaa00', '#ff0000'], size: 15, life: 0.3,
+                                    gravity: -50, friction: 0.98
+                                });
+
+                                // Damage nearby zombies
+                                this.zombies.forEach(zombie => {
+                                    if (zombie.dead) return;
+                                    const dx = zombie.x + zombie.width/2 - (bulletX + 50 * direction);
+                                    const dy = zombie.y + zombie.height/2 - this.player.y - 22;
+                                    const dist = Math.sqrt(dx*dx + dy*dy);
+                                    if (dist < 80 && (direction > 0 ? zombie.x > this.player.x : zombie.x < this.player.x)) {
+                                        const result = zombie.takeDamage(FLAMETHROWER_DAMAGE * damageMultiplier, 5);
+                                        if (result.died) {
+                                            this.addKill(zombie);
+                                            soundManager.playZombieDeath();
+                                        }
+                                    }
+                                });
+                            }
+                            break;
+
+                        default: // pistol
+                            if (this.player.shoot(currentTime)) {
+                                soundManager.playShoot();
+                                this.player.applyRecoil(8);
+                                this.player.triggerMuzzleFlash();
+                                this.screenEffects.shake(4, 0.1);
+                                this.screenEffects.flash('rgba(255, 200, 0, 0.3)', 0.3);
+
+                                this.particles.emit(this.player.x + this.player.width + 10, this.player.y + 22, 8, {
+                                    angle: 0, spread: Math.PI * 0.3, speed: 80,
+                                    colors: ['#888888', '#aaaaaa', '#666666'], size: 10, life: 0.4,
+                                    gravity: -50, friction: 0.95
+                                });
+
+                                const shellX = this.player.facingRight ? this.player.x + this.player.width - 5 : this.player.x + 5;
+                                this.shellCasings.push(new ShellCasing(shellX, this.player.y + 25, direction, false));
+
+                                this.projectiles.push(new Projectile(bulletX, this.player.y + 22, direction, SHOOT_DAMAGE * damageMultiplier));
+                            }
                     }
                 }
             }
@@ -3661,6 +4247,422 @@
                 }
             }
 
+            handleDash() {
+                const currentTime = performance.now();
+                if (currentTime - this.lastDashTime < DASH_COOLDOWN) return;
+                if (this.isDashing) return;
+
+                this.isDashing = true;
+                this.dashStartTime = currentTime;
+                this.lastDashTime = currentTime;
+                this.dashDirection = this.keys['d'] ? 1 : (this.keys['a'] ? -1 : (this.player.facingRight ? 1 : -1));
+
+                soundManager.playJump(); // Reuse jump sound for now
+
+                // Dash particles
+                this.particles.emit(this.player.x + this.player.width/2, this.player.y + this.player.height/2, 10, {
+                    angle: this.dashDirection > 0 ? Math.PI : 0,
+                    spread: Math.PI * 0.3,
+                    speed: 200,
+                    colors: ['#ffffff', '#aaaaff', '#8888ff'],
+                    size: 6,
+                    life: 0.3,
+                    gravity: 0,
+                    friction: 0.9
+                });
+            }
+
+            handleGrenade() {
+                if (this.grenadeCount <= 0) return;
+                const currentTime = performance.now();
+                if (currentTime - this.lastGrenadeTime < 500) return; // Short cooldown
+
+                this.grenadeCount--;
+                this.lastGrenadeTime = currentTime;
+
+                // Throw grenade towards nearest zombie or forward
+                let targetX = this.player.x + 200;
+                let nearestDist = 999;
+                for (let zombie of this.zombies) {
+                    if (zombie.dead) continue;
+                    const dist = Math.abs(zombie.x - this.player.x);
+                    if (dist < nearestDist && zombie.x > this.player.x) {
+                        nearestDist = dist;
+                        targetX = zombie.x + zombie.width/2;
+                    }
+                }
+
+                this.grenades.push(new Grenade(
+                    this.player.x + this.player.width,
+                    this.player.y + 20,
+                    targetX,
+                    CANVAS_HEIGHT - 20
+                ));
+
+                soundManager.playJump(); // Throw sound
+            }
+
+            handleUltimate() {
+                if (this.ultimateCharge < 100) return;
+
+                this.ultimateCharge = 0;
+                this.ultimateActive = true;
+
+                // Start the nuke cutscene
+                this.nukeCutscene = {
+                    active: true,
+                    phase: 'callout', // callout, plane, drop, falling, explosion, aftermath
+                    startTime: performance.now(),
+                    planeX: -200,
+                    bombX: 0,
+                    bombY: 50,
+                    bombDropped: false,
+                    explosionRadius: 0,
+                    flashIntensity: 0,
+                    mushroomCloudHeight: 0
+                };
+
+                soundManager.playGroundSmash();
+            }
+
+            updateNukeCutscene(currentTime) {
+                if (!this.nukeCutscene || !this.nukeCutscene.active) return;
+
+                const elapsed = currentTime - this.nukeCutscene.startTime;
+                const nuke = this.nukeCutscene;
+
+                // Phase timing
+                if (nuke.phase === 'callout' && elapsed > 1500) {
+                    nuke.phase = 'plane';
+                    nuke.planeX = -200;
+                }
+                else if (nuke.phase === 'plane') {
+                    nuke.planeX += 8;
+                    if (nuke.planeX > CANVAS_WIDTH / 2 - 50 && !nuke.bombDropped) {
+                        nuke.bombDropped = true;
+                        nuke.bombX = nuke.planeX + 30;
+                        nuke.bombY = 80;
+                        nuke.phase = 'falling';
+                    }
+                }
+                else if (nuke.phase === 'falling') {
+                    nuke.planeX += 8;
+                    nuke.bombY += 12;
+                    if (nuke.bombY > CANVAS_HEIGHT - 100) {
+                        nuke.phase = 'explosion';
+                        nuke.explosionStart = currentTime;
+                        this.screenEffects.shake(50, 3);
+                        // Play explosion sound
+                        soundManager.playGroundSmash();
+                        setTimeout(() => soundManager.playGroundSmash(), 100);
+                        setTimeout(() => soundManager.playGroundSmash(), 200);
+                    }
+                }
+                else if (nuke.phase === 'explosion') {
+                    const explosionElapsed = currentTime - nuke.explosionStart;
+
+                    // Bright flash
+                    if (explosionElapsed < 500) {
+                        nuke.flashIntensity = 1 - (explosionElapsed / 500) * 0.3;
+                    } else if (explosionElapsed < 1500) {
+                        nuke.flashIntensity = 0.7 - ((explosionElapsed - 500) / 1000) * 0.5;
+                    } else {
+                        nuke.flashIntensity = Math.max(0, 0.2 - (explosionElapsed - 1500) / 2000);
+                    }
+
+                    // Expanding fireball
+                    nuke.explosionRadius = Math.min(CANVAS_WIDTH * 2, explosionElapsed * 2);
+
+                    // Mushroom cloud rising
+                    nuke.mushroomCloudHeight = Math.min(300, explosionElapsed * 0.3);
+
+                    // Kill all zombies with MASSIVE damage at explosion start
+                    if (explosionElapsed < 100 && !nuke.zombiesKilled) {
+                        nuke.zombiesKilled = true;
+                        const NUKE_DAMAGE = 100000000000000000000000000000000000000;
+                        this.zombies.forEach(zombie => {
+                            if (zombie.dead) return;
+                            zombie.takeDamage(NUKE_DAMAGE, 100);
+                            // Vaporization particles
+                            this.particles.emit(zombie.x + zombie.width/2, zombie.y + zombie.height/2, 50, {
+                                angle: -Math.PI / 2,
+                                spread: Math.PI * 2,
+                                speed: 400,
+                                colors: ['#ffffff', '#ffff00', '#ff8800', '#ff0000'],
+                                size: 15,
+                                life: 2,
+                                gravity: -50,
+                                friction: 0.98
+                            });
+                        });
+                    }
+
+                    // End cutscene after 4 seconds
+                    if (explosionElapsed > 4000) {
+                        nuke.phase = 'aftermath';
+                        nuke.aftermathStart = currentTime;
+                    }
+                }
+                else if (nuke.phase === 'aftermath') {
+                    const aftermathElapsed = currentTime - nuke.aftermathStart;
+                    nuke.flashIntensity = Math.max(0, 0.1 - aftermathElapsed / 2000);
+
+                    if (aftermathElapsed > 2000) {
+                        this.nukeCutscene.active = false;
+                        this.ultimateActive = false;
+                    }
+                }
+            }
+
+            drawNukeCutscene() {
+                if (!this.nukeCutscene || !this.nukeCutscene.active) return;
+
+                const nuke = this.nukeCutscene;
+                const currentTime = performance.now();
+
+                // Callout text
+                if (nuke.phase === 'callout') {
+                    const elapsed = currentTime - nuke.startTime;
+                    const alpha = Math.min(1, elapsed / 300);
+
+                    ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.7})`;
+                    ctx.fillRect(0, CANVAS_HEIGHT / 2 - 60, CANVAS_WIDTH, 120);
+
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 28px Courier New';
+                    ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+                    ctx.fillText('CALLING IN NUCLEAR STRIKE', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
+
+                    ctx.font = 'bold 18px Courier New';
+                    ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
+                    ctx.fillText('☢ SEEK SHELTER IMMEDIATELY ☢', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+                }
+
+                // Draw B-29 bomber plane
+                if (nuke.phase === 'plane' || nuke.phase === 'falling' || (nuke.phase === 'explosion' && nuke.planeX < CANVAS_WIDTH + 200)) {
+                    if (nuke.phase === 'explosion') nuke.planeX += 8;
+
+                    ctx.fillStyle = '#708090';
+                    // Fuselage
+                    ctx.fillRect(nuke.planeX, 50, 100, 20);
+                    // Cockpit
+                    ctx.fillStyle = '#87CEEB';
+                    ctx.fillRect(nuke.planeX + 85, 52, 15, 10);
+                    // Wings
+                    ctx.fillStyle = '#708090';
+                    ctx.fillRect(nuke.planeX + 20, 45, 60, 8);
+                    ctx.fillRect(nuke.planeX + 20, 67, 60, 8);
+                    // Tail
+                    ctx.fillRect(nuke.planeX - 10, 35, 20, 50);
+                    ctx.fillRect(nuke.planeX - 20, 55, 15, 10);
+                    // Engines
+                    ctx.fillStyle = '#2F4F4F';
+                    ctx.fillRect(nuke.planeX + 25, 48, 8, 5);
+                    ctx.fillRect(nuke.planeX + 45, 48, 8, 5);
+                    ctx.fillRect(nuke.planeX + 25, 67, 8, 5);
+                    ctx.fillRect(nuke.planeX + 45, 67, 8, 5);
+
+                    // Label
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '8px Courier New';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('ENOLA GAY', nuke.planeX + 10, 63);
+                }
+
+                // Draw falling bomb (Fat Man style)
+                if (nuke.phase === 'falling') {
+                    ctx.fillStyle = '#2F4F4F';
+                    // Bomb body (oval)
+                    ctx.beginPath();
+                    ctx.ellipse(nuke.bombX, nuke.bombY, 15, 25, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Tail fins
+                    ctx.fillStyle = '#1a1a1a';
+                    ctx.fillRect(nuke.bombX - 20, nuke.bombY - 30, 8, 15);
+                    ctx.fillRect(nuke.bombX + 12, nuke.bombY - 30, 8, 15);
+                    ctx.fillRect(nuke.bombX - 5, nuke.bombY - 35, 10, 10);
+                    // Nose
+                    ctx.fillStyle = '#8B0000';
+                    ctx.beginPath();
+                    ctx.arc(nuke.bombX, nuke.bombY + 20, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Nuclear explosion
+                if (nuke.phase === 'explosion' || nuke.phase === 'aftermath') {
+                    // Blinding flash
+                    if (nuke.flashIntensity > 0) {
+                        ctx.fillStyle = `rgba(255, 255, 255, ${nuke.flashIntensity})`;
+                        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                    }
+
+                    // Fireball at ground
+                    const fireballRadius = Math.min(200, nuke.explosionRadius * 0.3);
+                    const gradient = ctx.createRadialGradient(
+                        CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50, 0,
+                        CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50, fireballRadius
+                    );
+                    gradient.addColorStop(0, 'rgba(255, 255, 200, 0.9)');
+                    gradient.addColorStop(0.3, 'rgba(255, 200, 0, 0.8)');
+                    gradient.addColorStop(0.6, 'rgba(255, 100, 0, 0.6)');
+                    gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50, fireballRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Mushroom cloud stem
+                    if (nuke.mushroomCloudHeight > 50) {
+                        const stemGradient = ctx.createLinearGradient(
+                            CANVAS_WIDTH / 2 - 30, CANVAS_HEIGHT - 50,
+                            CANVAS_WIDTH / 2 + 30, CANVAS_HEIGHT - 50
+                        );
+                        stemGradient.addColorStop(0, '#8B4513');
+                        stemGradient.addColorStop(0.5, '#D2691E');
+                        stemGradient.addColorStop(1, '#8B4513');
+                        ctx.fillStyle = stemGradient;
+                        ctx.fillRect(
+                            CANVAS_WIDTH / 2 - 25,
+                            CANVAS_HEIGHT - 50 - nuke.mushroomCloudHeight,
+                            50,
+                            nuke.mushroomCloudHeight
+                        );
+                    }
+
+                    // Mushroom cloud cap
+                    if (nuke.mushroomCloudHeight > 100) {
+                        const capY = CANVAS_HEIGHT - 50 - nuke.mushroomCloudHeight;
+                        const capRadius = 60 + nuke.mushroomCloudHeight * 0.3;
+
+                        const capGradient = ctx.createRadialGradient(
+                            CANVAS_WIDTH / 2, capY, 0,
+                            CANVAS_WIDTH / 2, capY, capRadius
+                        );
+                        capGradient.addColorStop(0, '#FF4500');
+                        capGradient.addColorStop(0.4, '#8B0000');
+                        capGradient.addColorStop(0.7, '#4a2020');
+                        capGradient.addColorStop(1, 'rgba(50, 20, 20, 0)');
+                        ctx.fillStyle = capGradient;
+                        ctx.beginPath();
+                        ctx.ellipse(CANVAS_WIDTH / 2, capY, capRadius, capRadius * 0.6, 0, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Inner glow
+                        const innerGradient = ctx.createRadialGradient(
+                            CANVAS_WIDTH / 2, capY - 10, 0,
+                            CANVAS_WIDTH / 2, capY - 10, capRadius * 0.5
+                        );
+                        innerGradient.addColorStop(0, 'rgba(255, 255, 200, 0.6)');
+                        innerGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+                        ctx.fillStyle = innerGradient;
+                        ctx.beginPath();
+                        ctx.ellipse(CANVAS_WIDTH / 2, capY - 10, capRadius * 0.5, capRadius * 0.3, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Shockwave ring
+                    if (nuke.explosionRadius > 100 && nuke.explosionRadius < CANVAS_WIDTH * 1.5) {
+                        ctx.strokeStyle = `rgba(255, 200, 100, ${0.5 - nuke.explosionRadius / (CANVAS_WIDTH * 3)})`;
+                        ctx.lineWidth = 10;
+                        ctx.beginPath();
+                        ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50, nuke.explosionRadius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+
+                    // "TACTICAL NUKE INCOMING" text during explosion
+                    if (nuke.phase === 'explosion') {
+                        const explosionElapsed = currentTime - nuke.explosionStart;
+                        if (explosionElapsed < 2000) {
+                            const textAlpha = explosionElapsed < 500 ? explosionElapsed / 500 : (2000 - explosionElapsed) / 1500;
+                            ctx.textAlign = 'center';
+                            ctx.font = 'bold 36px Courier New';
+                            ctx.fillStyle = `rgba(255, 0, 0, ${textAlpha})`;
+                            ctx.shadowColor = '#ff0000';
+                            ctx.shadowBlur = 20;
+                            ctx.fillText('☢ NUCLEAR STRIKE ☢', CANVAS_WIDTH / 2, 80);
+                            ctx.shadowBlur = 0;
+                        }
+                    }
+                }
+            }
+
+            // Add kill to combo system
+            addKill(zombie) {
+                const currentTime = performance.now();
+                const timeSinceLastKill = currentTime - this.lastKillTime;
+
+                if (timeSinceLastKill < COMBO_TIMEOUT) {
+                    this.comboCount++;
+                    this.comboMultiplier = Math.min(1 + this.comboCount * 0.5, COMBO_MULTIPLIER_MAX);
+                } else {
+                    this.comboCount = 1;
+                    this.comboMultiplier = 1;
+                }
+                this.lastKillTime = currentTime;
+
+                // Calculate score with multiplier
+                const baseScore = zombie.type === ZOMBIE_TYPE.TITAN ? KILL_SCORE * 10 :
+                                 zombie.type === ZOMBIE_TYPE.LARGE ? KILL_SCORE * 3 : KILL_SCORE;
+                const finalScore = Math.floor(baseScore * this.comboMultiplier);
+                this.score += finalScore;
+                this.highScore = Math.max(this.highScore, this.score);
+                this.saveHighScore();
+
+                // Charge ultimate
+                this.ultimateCharge = Math.min(100, this.ultimateCharge + ULTIMATE_CHARGE_PER_KILL);
+
+                // Kill streak announcements
+                const streakMessages = {
+                    5: 'KILLING SPREE!',
+                    10: 'RAMPAGE!',
+                    15: 'DOMINATING!',
+                    20: 'UNSTOPPABLE!',
+                    25: 'GODLIKE!'
+                };
+                if (streakMessages[this.comboCount]) {
+                    this.killStreakAnnouncements.push({
+                        text: streakMessages[this.comboCount],
+                        time: currentTime,
+                        y: CANVAS_HEIGHT / 2,
+                        scale: 1.5
+                    });
+                    this.screenEffects.shake(10, 0.3);
+                }
+
+                // Chance to drop power-up (10% chance)
+                if (Math.random() < 0.1) {
+                    const types = Object.values(POWERUP_TYPE);
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    this.powerUps.push(new PowerUp(zombie.x + zombie.width/2 - 10, zombie.y, type));
+                }
+
+                // Grenade restock chance (5%)
+                if (Math.random() < 0.05 && this.grenadeCount < MAX_GRENADES) {
+                    this.grenadeCount++;
+                }
+
+                return finalScore;
+            }
+
+            // Check milestones for weapon unlocks
+            checkMilestones() {
+                const milestones = [
+                    { score: 500, weapon: 'shotgun', text: 'SHOTGUN UNLOCKED!' },
+                    { score: 1500, weapon: 'rocketLauncher', text: 'ROCKET LAUNCHER UNLOCKED!' },
+                    { score: 3000, weapon: 'flamethrower', text: 'FLAMETHROWER UNLOCKED!' }
+                ];
+
+                for (let milestone of milestones) {
+                    if (this.score >= milestone.score && !this.unlockedWeapons[milestone.weapon]) {
+                        this.unlockedWeapons[milestone.weapon] = true;
+                        this.milestoneAnnouncement = milestone.text;
+                        this.milestoneAnnouncementTime = performance.now();
+                        this.screenEffects.flash('rgba(0, 255, 255, 0.4)', 0.5);
+                        this.screenEffects.shake(10, 0.3);
+                    }
+                }
+            }
+
             startGame() {
                 this.state = PLAYING;
                 this.player = new Player();
@@ -3689,6 +4691,33 @@
                 this.punchChargeStart = 0;
                 this.isPunchCharging = false;
                 this.superPunchReady = false;
+
+                // Reset new gameplay systems
+                this.comboCount = 0;
+                this.lastKillTime = 0;
+                this.comboMultiplier = 1;
+                this.killStreakAnnouncements = [];
+                this.powerUps = [];
+                this.activePowerUps = { damageBoost: 0, speedBoost: 0, shield: 0 };
+                this.grenades = [];
+                this.grenadeCount = MAX_GRENADES;
+                this.rockets = [];
+                this.currentWave = 1;
+                this.waveStartTime = performance.now();
+                this.isWaveBreak = false;
+                this.waveAnnouncement = 'WAVE 1';
+                this.waveAnnouncementTime = performance.now();
+                this.ultimateCharge = 0;
+                this.ultimateActive = false;
+                this.isDashing = false;
+                this.lastDashTime = 0;
+                this.currentWeapon = 'pistol';
+                this.flamethrowerActive = false;
+                this.slowMotionActive = false;
+                this.lastMilestoneScore = 0;
+                this.milestoneAnnouncement = '';
+                this.nukeCutscene = null;
+
                 soundManager.playBackgroundMusic();
             }
 
@@ -3700,13 +4729,20 @@
             }
 
             update(currentTime) {
-                const deltaTime = (currentTime - this.lastTime) / 1000;
+                // Apply slow motion if active
+                let deltaTime = (currentTime - this.lastTime) / 1000;
+                if (this.slowMotionActive && currentTime < this.slowMotionEndTime) {
+                    deltaTime *= 0.3; // 30% speed during slow motion
+                } else {
+                    this.slowMotionActive = false;
+                }
                 this.lastTime = currentTime;
 
                 // Always update screen effects and background
                 this.screenEffects.update(deltaTime);
                 this.background.update(deltaTime);
 
+                if (this.state === PAUSED) return;
                 if (this.state !== PLAYING) return;
 
                 // Hitstop - pause gameplay briefly
@@ -3750,7 +4786,7 @@
                 this.player.update(deltaTime, this.keys);
 
                 // Continuous minigun firing when Q is held
-                if (this.hasMinigun && this.keys['q']) {
+                if (this.currentWeapon === 'minigun' && this.hasMinigun && this.keys['q']) {
                     this.handleShoot();
                 }
 
@@ -3766,6 +4802,175 @@
                 } else {
                     this.player.punchChargeLevel = 0;
                 }
+
+                // === UPDATE NEW GAMEPLAY SYSTEMS ===
+
+                // Dash movement
+                if (this.isDashing) {
+                    if (currentTime - this.dashStartTime < DASH_DURATION) {
+                        this.player.x += this.dashDirection * DASH_SPEED * deltaTime;
+                        // Keep in bounds
+                        this.player.x = Math.max(this.base.x + this.base.width + 10,
+                            Math.min(CANVAS_WIDTH - this.player.width - 10, this.player.x));
+                    } else {
+                        this.isDashing = false;
+                    }
+                }
+
+                // Speed boost from power-up
+                if (this.activePowerUps.speedBoost > currentTime) {
+                    this.player.speed = this.playerNormalSpeed * 1.5;
+                }
+
+                // Update combo timeout
+                if (currentTime - this.lastKillTime > COMBO_TIMEOUT && this.comboCount > 0) {
+                    this.comboCount = 0;
+                    this.comboMultiplier = 1;
+                }
+
+                // Update power-ups
+                this.powerUps = this.powerUps.filter(powerup => {
+                    powerup.update(deltaTime);
+                    // Check player collision
+                    if (this.checkCollision(
+                        { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height },
+                        { x: powerup.x, y: powerup.y, width: powerup.width, height: powerup.height }
+                    )) {
+                        // Apply power-up effect
+                        switch (powerup.type) {
+                            case POWERUP_TYPE.HEALTH:
+                                this.base.health = Math.min(this.base.maxHealth, this.base.health + 50);
+                                break;
+                            case POWERUP_TYPE.DAMAGE_BOOST:
+                                this.activePowerUps.damageBoost = currentTime + 10000; // 10 seconds
+                                break;
+                            case POWERUP_TYPE.SPEED_BOOST:
+                                this.activePowerUps.speedBoost = currentTime + 10000;
+                                break;
+                            case POWERUP_TYPE.SHIELD:
+                                this.activePowerUps.shield = currentTime + 5000; // 5 seconds
+                                break;
+                        }
+                        soundManager.playHit(1.5);
+                        this.screenEffects.flash('rgba(255, 255, 255, 0.3)', 0.2);
+                        return false; // Remove power-up
+                    }
+                    return powerup.age < powerup.lifetime;
+                });
+
+                // Update grenades
+                this.grenades = this.grenades.filter(grenade => {
+                    const exploded = grenade.update(deltaTime);
+                    if (exploded) {
+                        // Explosion effect
+                        this.screenEffects.shake(12, 0.3);
+                        soundManager.playGroundSmash();
+                        this.particles.emit(grenade.x, grenade.y, 30, {
+                            angle: -Math.PI / 2,
+                            spread: Math.PI * 2,
+                            speed: 200,
+                            colors: ['#ff6600', '#ffaa00', '#ff0000', '#333333'],
+                            size: 10,
+                            life: 0.8,
+                            gravity: 200,
+                            friction: 0.95
+                        });
+                        // Damage nearby zombies
+                        this.zombies.forEach(zombie => {
+                            if (zombie.dead) return;
+                            const dx = zombie.x + zombie.width/2 - grenade.x;
+                            const dy = zombie.y + zombie.height/2 - grenade.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+                            if (dist < GRENADE_RADIUS) {
+                                const result = zombie.takeDamage(GRENADE_DAMAGE * (1 - dist/GRENADE_RADIUS), 30);
+                                if (result.died) {
+                                    this.addKill(zombie);
+                                    soundManager.playZombieDeath();
+                                }
+                            }
+                        });
+                        return false;
+                    }
+                    return true;
+                });
+
+                // Update rockets
+                this.rockets = this.rockets.filter(rocket => {
+                    const offScreen = rocket.update(deltaTime);
+                    // Check zombie collision
+                    for (let zombie of this.zombies) {
+                        if (zombie.dead) continue;
+                        if (this.checkCollision(
+                            { x: rocket.x, y: rocket.y - rocket.height/2, width: rocket.width, height: rocket.height },
+                            zombie.getHitbox()
+                        )) {
+                            // Rocket explosion
+                            this.screenEffects.shake(15, 0.4);
+                            soundManager.playGroundSmash();
+                            this.particles.emit(rocket.x + rocket.width, rocket.y, 40, {
+                                angle: Math.PI,
+                                spread: Math.PI,
+                                speed: 250,
+                                colors: ['#ff6600', '#ffaa00', '#ff0000'],
+                                size: 12,
+                                life: 0.6,
+                                gravity: 300,
+                                friction: 0.95
+                            });
+                            // Splash damage
+                            this.zombies.forEach(z => {
+                                if (z.dead) return;
+                                const dx = z.x + z.width/2 - rocket.x;
+                                const dy = z.y + z.height/2 - rocket.y;
+                                const dist = Math.sqrt(dx*dx + dy*dy);
+                                if (dist < ROCKET_RADIUS) {
+                                    const result = z.takeDamage(ROCKET_DAMAGE * (1 - dist/ROCKET_RADIUS * 0.5), 50);
+                                    if (result.died) {
+                                        this.addKill(z);
+                                        soundManager.playZombieDeath();
+                                    }
+                                }
+                            });
+                            return false;
+                        }
+                    }
+                    return !offScreen;
+                });
+
+                // Update nuke cutscene
+                this.updateNukeCutscene(currentTime);
+
+                // Wave system
+                if (!this.isWaveBreak) {
+                    if (currentTime - this.waveStartTime >= WAVE_DURATION) {
+                        // Check if all zombies dead for wave clear
+                        const aliveZombies = this.zombies.filter(z => !z.dead).length;
+                        if (aliveZombies <= 1 && aliveZombies > 0) {
+                            // Slow motion for last zombie
+                            this.slowMotionActive = true;
+                            this.slowMotionEndTime = currentTime + 1000;
+                        }
+                        if (aliveZombies === 0) {
+                            this.isWaveBreak = true;
+                            this.waveBreakStartTime = currentTime;
+                            this.waveAnnouncement = 'WAVE COMPLETE!';
+                            this.waveAnnouncementTime = currentTime;
+                        }
+                    }
+                } else {
+                    if (currentTime - this.waveBreakStartTime >= WAVE_BREAK_DURATION) {
+                        this.isWaveBreak = false;
+                        this.currentWave++;
+                        this.waveStartTime = currentTime;
+                        this.waveAnnouncement = 'WAVE ' + this.currentWave;
+                        this.waveAnnouncementTime = currentTime;
+                        // Increase difficulty each wave
+                        this.spawnInterval = Math.max(MIN_SPAWN_INTERVAL, INITIAL_SPAWN_INTERVAL - this.currentWave * 200);
+                    }
+                }
+
+                // Check milestones
+                this.checkMilestones();
 
                 // Landing dust particles and sound
                 if (wasInAir && this.player.y >= this.player.groundY && this.player.landSquash > 0) {
@@ -3789,25 +4994,38 @@
                     this.pendingGroundSmash = false;
                 }
 
-                // Spawn zombies with different types
-                if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
+                // Spawn zombies with different types (skip during wave break)
+                if (!this.isWaveBreak && currentTime - this.lastSpawnTime >= this.spawnInterval * this.difficulty.spawnMultiplier) {
                     // Determine zombie type based on probability
-                    // 60% normal, 10% fast, 10% radioactive, 10% jumping, 10% chance nothing (balanced)
+                    // 45% normal, 10% fast, 10% radioactive, 10% jumping, 10% armored, 10% exploding, 5% random
                     const roll = Math.random();
                     let zombieType;
-                    if (roll < 0.60) {
+                    if (roll < 0.45) {
                         zombieType = ZOMBIE_TYPE.NORMAL;
-                    } else if (roll < 0.70) {
+                    } else if (roll < 0.55) {
                         zombieType = ZOMBIE_TYPE.FAST;
-                    } else if (roll < 0.80) {
+                    } else if (roll < 0.65) {
                         zombieType = ZOMBIE_TYPE.RADIOACTIVE;
-                    } else if (roll < 0.90) {
+                    } else if (roll < 0.75) {
                         zombieType = ZOMBIE_TYPE.JUMPING;
+                    } else if (roll < 0.85) {
+                        zombieType = ZOMBIE_TYPE.ARMORED;
+                    } else if (roll < 0.95) {
+                        zombieType = ZOMBIE_TYPE.EXPLODING;
                     } else {
-                        zombieType = ZOMBIE_TYPE.NORMAL; // Fill remaining 10% with normal
+                        zombieType = ZOMBIE_TYPE.NORMAL;
                     }
 
-                    this.zombies.push(new Zombie(zombieType));
+                    const zombie = new Zombie(zombieType);
+                    zombie.health *= this.difficulty.healthMultiplier;
+                    zombie.maxHealth = zombie.health;
+
+                    // Scale armor with wave (starts weak at 20, gets stronger each wave)
+                    if (zombie.type === ZOMBIE_TYPE.ARMORED && zombie.hasArmor) {
+                        zombie.armorHealth = 20 + (this.currentWave - 1) * 15; // 20 at wave 1, 35 at wave 2, etc.
+                    }
+
+                    this.zombies.push(zombie);
                     this.lastSpawnTime = currentTime;
                     this.spawnInterval = Math.max(MIN_SPAWN_INTERVAL, this.spawnInterval - SPAWN_ACCELERATION);
                 }
@@ -4057,6 +5275,11 @@
                     this.drawSplash();
                 } else if (this.state === PLAYING) {
                     this.drawGame();
+                    this.drawHUD();
+                } else if (this.state === PAUSED) {
+                    this.drawGame();
+                    this.drawHUD();
+                    this.drawPaused();
                 } else if (this.state === GAME_OVER) {
                     this.drawGame();
                     this.drawGameOver();
@@ -4243,11 +5466,49 @@
                 // Draw particles (behind entities)
                 this.particles.draw(ctx);
 
+                // Draw power-ups
+                this.powerUps.forEach(powerup => powerup.draw());
+
+                // Draw grenades
+                this.grenades.forEach(grenade => grenade.draw());
+
+                // Draw rockets
+                this.rockets.forEach(rocket => rocket.draw());
+
                 // Draw zombies
                 this.zombies.forEach(zombie => zombie.draw());
 
                 // Draw player
                 this.player.draw();
+
+                // Draw dash trail if dashing
+                if (this.isDashing) {
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillStyle = '#8888ff';
+                    for (let i = 0; i < 3; i++) {
+                        ctx.fillRect(
+                            this.player.x - this.dashDirection * (i + 1) * 15,
+                            this.player.y,
+                            this.player.width,
+                            this.player.height
+                        );
+                    }
+                    ctx.globalAlpha = 1;
+                }
+
+                // Draw shield effect if active
+                if (this.activePowerUps.shield > performance.now()) {
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(
+                        this.player.x + this.player.width/2,
+                        this.player.y + this.player.height/2,
+                        35 + Math.sin(performance.now() / 100) * 3,
+                        0, Math.PI * 2
+                    );
+                    ctx.stroke();
+                }
 
                 // Draw projectiles
                 this.projectiles.forEach(proj => proj.draw());
@@ -4286,8 +5547,8 @@
                 // Draw damage numbers
                 this.damageNumbers.forEach(dn => dn.draw(ctx));
 
-                // Draw HUD
-                this.drawHUD();
+                // Draw nuke cutscene on top of everything
+                this.drawNukeCutscene();
             }
 
             drawHUD() {
@@ -4336,7 +5597,7 @@
                 ctx.font = '11px Courier New';
 
                 // Shoot/Minigun cooldown
-                if (this.hasMinigun) {
+                if (this.currentWeapon === 'minigun' && this.hasMinigun) {
                     // Minigun is always ready (near-instant cooldown)
                     ctx.fillStyle = '#ff8800';
                     ctx.fillText('MINIGUN [Q]', CANVAS_WIDTH / 2 - 40, 25);
@@ -4491,6 +5752,185 @@
                         this.minigunUnlockAnnouncement = false;
                     }
                 }
+
+                // === NEW HUD ELEMENTS ===
+
+                // Combo counter (top center)
+                if (this.comboCount > 1) {
+                    const comboPulse = Math.sin(currentTime / 100) * 0.2 + 0.8;
+                    ctx.fillStyle = `rgba(255, ${Math.floor(200 - this.comboCount * 20)}, 0, ${comboPulse})`;
+                    ctx.font = 'bold 24px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`${this.comboCount}x COMBO!`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 60);
+                    ctx.font = '14px Courier New';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(`x${this.comboMultiplier.toFixed(1)} multiplier`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+                }
+
+                // Ultimate charge bar (bottom left)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(10, CANVAS_HEIGHT - 50, 100, 40);
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Courier New';
+                ctx.textAlign = 'left';
+                ctx.fillText('ULTIMATE [R]', 15, CANVAS_HEIGHT - 35);
+                // Bar background
+                ctx.fillStyle = '#333';
+                ctx.fillRect(15, CANVAS_HEIGHT - 28, 90, 12);
+                // Bar fill
+                const ultGradient = ctx.createLinearGradient(15, 0, 105, 0);
+                ultGradient.addColorStop(0, '#ff00ff');
+                ultGradient.addColorStop(1, '#ffff00');
+                ctx.fillStyle = this.ultimateCharge >= 100 ? ultGradient : '#8800aa';
+                ctx.fillRect(15, CANVAS_HEIGHT - 28, 90 * (this.ultimateCharge / 100), 12);
+                if (this.ultimateCharge >= 100) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 10px Courier New';
+                    ctx.fillText('READY!', 45, CANVAS_HEIGHT - 18);
+                }
+
+                // Wave info (top left, below base health)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(10, 65, 100, 25);
+                ctx.fillStyle = '#00ffff';
+                ctx.font = 'bold 14px Courier New';
+                ctx.textAlign = 'left';
+                ctx.fillText(`WAVE ${this.currentWave}`, 20, 82);
+                if (this.isWaveBreak) {
+                    ctx.fillStyle = '#88ff88';
+                    ctx.font = '10px Courier New';
+                    const breakTimeLeft = Math.ceil((WAVE_BREAK_DURATION - (currentTime - this.waveBreakStartTime)) / 1000);
+                    ctx.fillText(`Break: ${breakTimeLeft}s`, 20, 85);
+                }
+
+                // Grenade count (bottom center-right)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(CANVAS_WIDTH - 110, CANVAS_HEIGHT - 50, 100, 25);
+                ctx.fillStyle = this.grenadeCount > 0 ? '#88ff88' : '#ff6666';
+                ctx.font = '12px Courier New';
+                ctx.textAlign = 'right';
+                ctx.fillText(`GRENADES [G]: ${this.grenadeCount}`, CANVAS_WIDTH - 15, CANVAS_HEIGHT - 32);
+
+                // Current weapon display
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(CANVAS_WIDTH - 110, CANVAS_HEIGHT - 80, 100, 25);
+                const weaponNames = { pistol: 'PISTOL', shotgun: 'SHOTGUN', rocketLauncher: 'ROCKET', flamethrower: 'FLAME', minigun: 'MINIGUN' };
+                ctx.fillStyle = this.currentWeapon === 'minigun' ? '#ff8800' : '#ffaa00';
+                ctx.font = '12px Courier New';
+                ctx.fillText(weaponNames[this.currentWeapon] || 'PISTOL', CANVAS_WIDTH - 15, CANVAS_HEIGHT - 62);
+
+                // Weapon unlock hints
+                ctx.font = '9px Courier New';
+                ctx.fillStyle = '#888888';
+                let hintY = CANVAS_HEIGHT - 100;
+                if (!this.hasMinigun) {
+                    ctx.fillStyle = '#ff8800';
+                    ctx.fillText('Press 5: Minigun!', CANVAS_WIDTH - 15, hintY -= 12);
+                    ctx.fillStyle = '#888888';
+                }
+                if (!this.unlockedWeapons.shotgun) ctx.fillText('500pts: Shotgun', CANVAS_WIDTH - 15, hintY -= 12);
+                else if (!this.unlockedWeapons.rocketLauncher) ctx.fillText('1500pts: Rocket', CANVAS_WIDTH - 15, hintY -= 12);
+                else if (!this.unlockedWeapons.flamethrower) ctx.fillText('3000pts: Flame', CANVAS_WIDTH - 15, hintY -= 12);
+
+                // Dash cooldown indicator
+                const dashCooldownLeft = Math.max(0, DASH_COOLDOWN - (currentTime - this.lastDashTime));
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(115, CANVAS_HEIGHT - 50, 60, 25);
+                ctx.fillStyle = dashCooldownLeft > 0 ? '#666' : '#88ff88';
+                ctx.font = '10px Courier New';
+                ctx.textAlign = 'left';
+                ctx.fillText('DASH [E]', 120, CANVAS_HEIGHT - 32);
+
+                // Kill streak announcements
+                this.killStreakAnnouncements = this.killStreakAnnouncements.filter(ann => {
+                    const age = currentTime - ann.time;
+                    if (age > 2000) return false;
+
+                    const alpha = age < 200 ? age / 200 : (2000 - age) / 1800;
+                    const scale = ann.scale || 1;
+                    const yOffset = age * 0.03;
+
+                    ctx.textAlign = 'center';
+                    ctx.font = `bold ${Math.floor(28 * scale)}px Courier New`;
+                    ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
+                    ctx.shadowColor = '#ff6600';
+                    ctx.shadowBlur = 10;
+                    ctx.fillText(ann.text, CANVAS_WIDTH / 2, ann.y - yOffset);
+                    ctx.shadowBlur = 0;
+                    return true;
+                });
+
+                // Wave announcement
+                if (currentTime - this.waveAnnouncementTime < 2000) {
+                    const age = currentTime - this.waveAnnouncementTime;
+                    const alpha = age < 300 ? age / 300 : (2000 - age) / 1700;
+
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 36px Courier New';
+                    ctx.fillStyle = `rgba(0, 255, 255, ${alpha})`;
+                    ctx.shadowColor = '#00aaaa';
+                    ctx.shadowBlur = 15;
+                    ctx.fillText(this.waveAnnouncement, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 80);
+                    ctx.shadowBlur = 0;
+                }
+
+                // Milestone announcement
+                if (currentTime - this.milestoneAnnouncementTime < 3000 && this.milestoneAnnouncement) {
+                    const age = currentTime - this.milestoneAnnouncementTime;
+                    const alpha = age < 300 ? age / 300 : (3000 - age) / 2700;
+
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 28px Courier New';
+                    ctx.fillStyle = `rgba(0, 255, 200, ${alpha})`;
+                    ctx.shadowColor = '#00ffaa';
+                    ctx.shadowBlur = 15;
+                    ctx.fillText(this.milestoneAnnouncement, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+                    ctx.shadowBlur = 0;
+                }
+
+                // Active power-up indicators
+                const powerUpY = 95;
+                let powerUpX = 20;
+                if (this.activePowerUps.damageBoost > currentTime) {
+                    ctx.fillStyle = '#ff4444';
+                    ctx.font = '10px Courier New';
+                    ctx.textAlign = 'left';
+                    const timeLeft = Math.ceil((this.activePowerUps.damageBoost - currentTime) / 1000);
+                    ctx.fillText(`DMG x2: ${timeLeft}s`, powerUpX, powerUpY);
+                    powerUpX += 70;
+                }
+                if (this.activePowerUps.speedBoost > currentTime) {
+                    ctx.fillStyle = '#44aaff';
+                    const timeLeft = Math.ceil((this.activePowerUps.speedBoost - currentTime) / 1000);
+                    ctx.fillText(`SPD x1.5: ${timeLeft}s`, powerUpX, powerUpY);
+                    powerUpX += 80;
+                }
+                if (this.activePowerUps.shield > currentTime) {
+                    ctx.fillStyle = '#ffff44';
+                    const timeLeft = Math.ceil((this.activePowerUps.shield - currentTime) / 1000);
+                    ctx.fillText(`SHIELD: ${timeLeft}s`, powerUpX, powerUpY);
+                }
+            }
+
+            drawPaused() {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 48px Courier New';
+                ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
+
+                ctx.font = '18px Courier New';
+                ctx.fillStyle = '#aaaaaa';
+                ctx.fillText('Press P or ESC to resume', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
+
+                // Controls reminder
+                ctx.font = '14px Courier New';
+                ctx.fillStyle = '#888888';
+                ctx.fillText('A/D - Move | SPACE - Punch | Q - Shoot | W - Jump', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 70);
+                ctx.fillText('S - Smash | E - Dash | G - Grenade | R - Ultimate', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 90);
+                ctx.fillText('1-5 - Switch Weapons (5 = Minigun)', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 110);
             }
 
             drawGameOver() {
