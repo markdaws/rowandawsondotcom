@@ -1923,7 +1923,10 @@ const ADM={god:false,ammo:false,nowant:false,nocops:false,fast:false,jump:false,
 const ADM_T=[['god','God mode','Take no damage'],['ammo','Infinite ammo','Never run out or reload'],['nowant','Never wanted','Cops ignore your crimes'],['nocops','No police','Delete all cops and keep them away'],['ohk','One-hit kills','Everything drops in one hit'],['fast','Super speed','Run twice as fast'],['jump','Super jump','Jump way higher'],['stam','Infinite stamina','Sprint forever'],['freeze','Freeze time','Stop the clock']];
 const ADM_V=[['tank','Tank'],['jet','F-35A jet'],['f35b','F-35B (hovers)'],['f35c','F-35C navy jet'],['milheli','Attack chopper'],['warship','Warship'],['carrier','Aircraft carrier'],['boat','Speedboat'],['sedan','Car'],['sport','Sports car'],['suv','SUV'],['van','Van'],['taxi','Taxi'],['ambulance','Ambulance'],['armored','Armored truck'],['bike','Motorbike'],['bicycle','Bicycle'],['heli','Helicopter'],['police','Cop car']];
 const ADM_P=[['casino','Casino'],['home','Apartment'],['bank','Bank'],['store','Store'],['guns','Gun store'],['hospital','Hospital'],['garage','Garage'],['customs','Customs'],['gym','Gym']];
-let admTab='player';
+let admTab='player',admWipe=0;
+function fullReset(){try{for(const k of ['robberySave','robberyBest','robberyBright','robberyQ','robberySens'])localStorage.removeItem(k)}catch(e){}
+  try{closePhone()}catch(e){}const f=$('fade');if(f)f.style.opacity=1;setTimeout(()=>{try{location.reload()}catch(e){}
+    setTimeout(()=>{for(const k in ADM)ADM[k]=false;P.god=false;reset();started=false;running=false;if(f)f.style.opacity=0;$('play').textContent='PLAY';showMenu('','Welcome to Port Ardent. Everything has been reset.','PLAY');$('newg').hidden=true},600)},350)}
 function admSpawn(t){if(P.area){showMsg('GO OUTSIDE FIRST',1);return}if(admMil(t))return;const w=wp(),x=w.x-Math.sin(P.yaw)*7,z=w.z-Math.cos(P.yaw)*7;const c=t==='police'?makeCar(x,z,P.yaw,0x1a1a1a,true,'sedan'):makeCar(x,z,P.yaw,[0xd23b3b,0x2f6fd6,0xf2c14e,0xeeeeee,0x222222,0x3aa65a][Math.random()*6|0],false,t);if(c){c.fuel=1;if(t==='police'){c.police=null;c.lr=true}}showMsg('SPAWNED',.8)}
 function admMil(t){const w=wp(),fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
   if(t==='tank'){makeMil(w.x+fx*9,w.z+fz*9,P.yaw+PI,'tank');showMsg('TANK SPAWNED',1);return true}
@@ -1941,6 +1944,7 @@ function admAct(a){const[k,v]=a.split(':');
   else if(k==='guns'){for(const m of MAINS)addMain(m);inv.own.bat=inv.own.knife=1;inv.gren+=10;for(const q in inv.ammo)if(!MELEES.includes(q))inv.ammo[q][1]+=999}
   else if(k==='jp'){prop.jetpack=1;closePhone();if(!P.jp)toggleJP()}
   else if(k==='dog'){prop.dog=1;showMsg('CHOP IS NOW YOUR DOG',1.2)}
+  else if(k==='wipe'){if(now<admWipe){fullReset();return}admWipe=now+4;showMsg('TAP RESET AGAIN TO CONFIRM',1.4)}
   else if(k==='skills'){for(const q in skill)skill[q]=100}
   else if(k==='veh')admSpawn(v);
   else if(k==='fix'){if(P.car){P.car.hp=100;P.car.fuel=1;P.car.wreck=false;showMsg('VEHICLE FIXED',.8)}else showMsg('GET IN A VEHICLE',.8)}
@@ -1960,7 +1964,8 @@ function admHTML(){const tb=(id,l)=>`<button class="rs" data-a="tab:${id}" style
   let h=`<div style="display:flex;gap:4px;margin-bottom:8px">${tb('player','Player')}${tb('world','World')}${tb('spawn','Spawn')}${tb('tp','Teleport')}</div>`;
   if(admTab==='player'){h+=ADM_T.map(([k,l,d])=>`<button class="rs" data-a="t:${k}" style="display:flex;justify-content:space-between;align-items:center"><span>${l}<br><small style="opacity:.6;font-weight:400">${d}</small></span><b style="padding:4px 10px;border-radius:8px;background:${ADM[k]?'#1f9d55':'#555'}">${ADM[k]?'ON':'OFF'}</b></button>`).join('');
     h+=grid(bt('heal','Heal + armor')+bt('guns','All weapons')+bt('money:10000','+$10K')+bt('money:1000000','+$1M')+bt('skills','Max skills')+bt('jp','Jetpack')+bt('dog','Pet dog')+bt('fix','Fix vehicle'));
-    h+='<p class="sub" style="margin:4px 0">Wanted level</p>'+`<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">${[0,1,2,3,4,5].map(n=>bt('star:'+n,n?n+'★':'0')).join('')}</div>`}
+    h+='<p class="sub" style="margin:4px 0">Wanted level</p>'+`<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">${[0,1,2,3,4,5].map(n=>bt('star:'+n,n?n+'★':'0')).join('')}</div>`;
+    h+=`<button class="rs" data-a="wipe" style="margin:14px 0 0;text-align:center;min-height:48px;background:${now<admWipe?'#e5383b':'#5a1a1a'};font-weight:700">${now<admWipe?'TAP AGAIN — WIPE EVERYTHING':'RESET ALL'}</button><p class="sub" style="font-size:12px;margin:4px 0 0">Deletes your save, money, property, settings and progress and goes back to the first screen.</p>`}
   else if(admTab==='world'){h+='<p class="sub" style="margin:4px 0">Time</p>'+grid(bt('time:7','Morning')+bt('time:12','Noon')+bt('time:18.5','Sunset')+bt('time:23','Night'));
     h+='<p class="sub" style="margin:4px 0">Weather</p>'+grid(['clear','rain','storm','fog'].map(w=>bt('wx:'+w,w[0].toUpperCase()+w.slice(1))).join(''));
     h+='<p class="sub" style="margin:4px 0">Enemies</p>'+grid(bt('kill','Kill nearby enemies')+bt('cops','Remove all cops'))+grid(bt('pkg','Find all packages'))}
